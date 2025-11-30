@@ -23,9 +23,18 @@ interface ItineraryPanelProps {
   places: Place[];
   tripDays?: number;
   onPlaceMoved?: (placeId: string, newDay: number | null, newOrder: number) => void;
+  onPlaceEdit?: (place: Place) => void;
 }
 
-function DraggablePlace({ place, index }: { place: Place; index?: number }) {
+function DraggablePlace({
+  place,
+  index,
+  onEdit,
+}: {
+  place: Place;
+  index?: number;
+  onEdit?: (place: Place) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: place.id,
     data: { place },
@@ -38,30 +47,52 @@ function DraggablePlace({ place, index }: { place: Place; index?: number }) {
       }
     : undefined;
 
+  function handleMenuClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    onEdit?.(place);
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
       className={`${
         place.day_assigned ? 'bg-blue-50' : 'bg-gray-50'
       } rounded-lg p-3 hover:${
         place.day_assigned ? 'bg-blue-100' : 'bg-gray-100'
-      } transition-colors cursor-move`}
+      } transition-colors relative`}
     >
       <div className="flex items-start gap-2">
-        {index !== undefined && (
-          <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
-            {index + 1}
-          </span>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="font-medium text-sm">{place.name}</div>
-          <div className="text-xs text-gray-500 mt-1">
-            {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
+        <div
+          {...listeners}
+          {...attributes}
+          className="flex-1 flex items-start gap-2 cursor-move"
+        >
+          {index !== undefined && (
+            <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+              {index + 1}
+            </span>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm">{place.name}</div>
+            <div className="text-xs text-gray-500 mt-1">
+              {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
+            </div>
           </div>
         </div>
+        <button
+          onClick={handleMenuClick}
+          className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+          aria-label="Edit place"
+        >
+          <svg
+            className="w-5 h-5 text-gray-600"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -92,8 +123,10 @@ export default function ItineraryPanel({
   places,
   tripDays = 3,
   onPlaceMoved,
+  onPlaceEdit,
 }: ItineraryPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isUnassignedCollapsed, setIsUnassignedCollapsed] = useState(false);
   const [activePlace, setActivePlace] = useState<Place | null>(null);
 
   // Group places by day
@@ -181,19 +214,50 @@ export default function ItineraryPanel({
         </div>
 
         {/* Unassigned Section */}
-        <div className="p-4 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-600 mb-2 uppercase">
-            Unassigned ({unassignedPlaces.length})
-          </h3>
-          <DroppableZone id="unassigned">
-            {unassignedPlaces.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No unassigned places</p>
-            ) : (
-              unassignedPlaces.map((place) => (
-                <DraggablePlace key={place.id} place={place} />
-              ))
+        <div className="border-b border-gray-200">
+          <div className="p-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase">
+              Unassigned ({unassignedPlaces.length})
+            </h3>
+            {unassignedPlaces.length > 0 && (
+              <button
+                onClick={() => setIsUnassignedCollapsed(!isUnassignedCollapsed)}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                aria-label={isUnassignedCollapsed ? 'Expand' : 'Collapse'}
+              >
+                <svg
+                  className={`w-4 h-4 transform transition-transform ${isUnassignedCollapsed ? '' : 'rotate-180'}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
             )}
-          </DroppableZone>
+          </div>
+          {!isUnassignedCollapsed && (
+            <div className="px-4 pb-4 max-h-64 overflow-y-auto">
+              <DroppableZone id="unassigned">
+                {unassignedPlaces.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">No unassigned places</p>
+                ) : (
+                  unassignedPlaces.map((place) => (
+                    <DraggablePlace
+                      key={place.id}
+                      place={place}
+                      onEdit={onPlaceEdit}
+                    />
+                  ))
+                )}
+              </DroppableZone>
+            </div>
+          )}
         </div>
 
         {/* Day Sections */}
@@ -208,7 +272,12 @@ export default function ItineraryPanel({
                   <p className="text-sm text-gray-400 italic">No places assigned</p>
                 ) : (
                   dayGroups[day].map((place, index) => (
-                    <DraggablePlace key={place.id} place={place} index={index} />
+                    <DraggablePlace
+                      key={place.id}
+                      place={place}
+                      index={index}
+                      onEdit={onPlaceEdit}
+                    />
                   ))
                 )}
               </DroppableZone>

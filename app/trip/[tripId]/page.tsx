@@ -6,6 +6,7 @@ import MapView from '@/components/map/MapView';
 import PlaceModal from '@/components/map/PlaceModal';
 import ItineraryPanel from '@/components/itinerary/ItineraryPanel';
 import { subscribeToTrip, broadcastEvent, RealtimeEvent } from '@/lib/supabase/realtime';
+import { getDistance } from '@/lib/utils/geo';
 import { use } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -33,6 +34,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [cursors, setCursors] = useState<Map<string, Cursor>>(new Map());
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -176,7 +178,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
     const { data, error } = await createPlace(newPlace);
     if (data) {
-      setPlaces([...places, data]);
+      setPlaces((prevPlaces) => [...prevPlaces, data]);
       
       // Broadcast to other users
       if (channel) {
@@ -190,6 +192,33 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     }
   }
 
+  async function handleSearchResult(result: { id: string; name: string; lat: number; lng: number; address?: string }) {
+    const newPlace = {
+      trip_id: tripId,
+      name: result.name,
+      lat: result.lat,
+      lng: result.lng,
+      category: 'other' as const,
+      address: result.address || null,
+      created_by: getUserId(),
+    };
+
+    const { data, error } = await createPlace(newPlace);
+    if (data) {
+      setPlaces((prevPlaces) => [...prevPlaces, data]);
+      
+      // Broadcast to other users
+      if (channel) {
+        broadcastEvent(channel, {
+          type: 'place_added',
+          place: data,
+        });
+      }
+    } else {
+      console.error('Failed to create place from search:', error);
+    }
+  }
+
   function handleMarkerClick(place: Place) {
     setSelectedPlace(place);
     setIsModalOpen(true);
@@ -198,7 +227,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   async function handleSavePlace(id: string, name: string) {
     const { data, error } = await updatePlace(id, { name });
     if (data) {
-      setPlaces(places.map((p) => (p.id === id ? { ...p, name } : p)));
+      setPlaces((prevPlaces) => prevPlaces.map((p) => (p.id === id ? { ...p, name } : p)));
       
       // Broadcast to other users
       if (channel) {
@@ -216,7 +245,8 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   async function handleDeletePlace(id: string) {
     const { error } = await deletePlace(id);
     if (!error) {
-      setPlaces(places.filter((p) => p.id !== id));
+      // Use functional update to avoid stale state
+      setPlaces((prevPlaces) => prevPlaces.filter((p) => p.id !== id));
       
       // Broadcast to other users
       if (channel) {
@@ -232,12 +262,13 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
   async function handlePlaceMoved(placeId: string, newDay: number | null, newOrder: number) {
     // Optimistic update - update UI immediately
-    const previousPlaces = [...places];
-    setPlaces(
-      places.map((p) =>
+    let previousPlaces: Place[] = [];
+    setPlaces((prevPlaces) => {
+      previousPlaces = [...prevPlaces];
+      return prevPlaces.map((p) =>
         p.id === placeId ? { ...p, day_assigned: newDay, order_index: newOrder } : p
-      )
-    );
+      );
+    });
 
     // Then update database
     const { error } = await updatePlace(placeId, {
@@ -261,6 +292,140 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     }
   }
 
+  async function handleGenerateItinerary() {
+    // Get only unassigned places (get current state)
+    const currentPlaces = places;
+    const unassignedPlaces = currentPlaces.filter((p) => p.day_assigned === null);
+
+    if (unassignedPlaces.length === 0) {
+      alert('No unassigned places to organize. Add more places or drag them back to "Unassigned" first.');
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      // Special case: If only 1-2 unassigned places, assign them to nearest existing day
+      if (unassignedPlaces.length < 3) {
+        const assignedPlaces = currentPlaces.filter((p) => p.day_assigned !== null);
+        
+        if (assignedPlaces.length === 0) {
+          // No existing itinerary, need at least 3 places to create one
+          alert('Add at least 3 places to generate a meaningful itinerary.');
+          setIsGenerating(false);
+          return;
+        }
+
+        // Group assigned places by day
+        const placesByDay: Record<number, typeof assignedPlaces> = {};
+        assignedPlaces.forEach((p) => {
+          if (p.day_assigned) {
+            if (!placesByDay[p.day_assigned]) {
+              placesByDay[p.day_assigned] = [];
+            }
+            placesByDay[p.day_assigned].push(p);
+          }
+        });
+
+        // For each unassigned place, find the nearest day's centroid
+        for (const unassignedPlace of unassignedPlaces) {
+          let nearestDay = 1;
+          let minDistance = Infinity;
+
+          // Calculate centroid for each day and find nearest
+          for (const [dayStr, dayPlaces] of Object.entries(placesByDay)) {
+            const day = parseInt(dayStr);
+            if (dayPlaces.length === 0) continue;
+
+            // Calculate centroid of this day
+            const avgLat = dayPlaces.reduce((sum, p) => sum + p.lat, 0) / dayPlaces.length;
+            const avgLng = dayPlaces.reduce((sum, p) => sum + p.lng, 0) / dayPlaces.length;
+
+            // Calculate distance from unassigned place to day's centroid (in km)
+            const distance = getDistance(
+              unassignedPlace.lat,
+              unassignedPlace.lng,
+              avgLat,
+              avgLng
+            );
+
+            if (distance < minDistance) {
+              minDistance = distance;
+              nearestDay = day;
+            }
+          }
+
+          // Add to nearest day (at the end)
+          const dayPlaces = placesByDay[nearestDay] || [];
+          const maxOrder = dayPlaces.reduce((max, p) => Math.max(max, p.order_index || 0), -1);
+          const newOrder = maxOrder + 1;
+
+          await updatePlace(unassignedPlace.id, {
+            day_assigned: nearestDay,
+            order_index: newOrder,
+          });
+
+          // Broadcast update
+          if (channel) {
+            broadcastEvent(channel, {
+              type: 'place_updated',
+              id: unassignedPlace.id,
+              updates: { day_assigned: nearestDay, order_index: newOrder },
+            });
+          }
+        }
+
+        // Reload data to reflect changes
+        await loadData();
+        setIsGenerating(false);
+        return;
+      }
+
+      // Normal case: 3+ unassigned places, use full clustering
+      const response = await fetch('/api/ai/generate-itinerary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          places: unassignedPlaces,
+          tripDays: 3,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate itinerary');
+      }
+
+      const { itinerary } = await response.json();
+
+      // Update all places in database
+      for (const day of itinerary) {
+        for (const place of day.places) {
+          await updatePlace(place.id, {
+            day_assigned: day.day,
+            order_index: place.order,
+          });
+
+          // Broadcast each update
+          if (channel) {
+            broadcastEvent(channel, {
+              type: 'place_updated',
+              id: place.id,
+              updates: { day_assigned: day.day, order_index: place.order },
+            });
+          }
+        }
+      }
+
+      // Reload data to reflect changes
+      await loadData();
+    } catch (error) {
+      console.error('Failed to generate itinerary:', error);
+      alert('Failed to generate itinerary. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -268,6 +433,8 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       </div>
     );
   }
+
+  const unassignedCount = places.filter((p) => p.day_assigned === null).length;
 
   return (
     <>
@@ -277,8 +444,48 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         onMarkerClick={handleMarkerClick}
         cursors={Array.from(cursors.values())}
         onMapMove={handleMapMove}
+        onSearchResult={handleSearchResult}
       />
-      <ItineraryPanel places={places} tripDays={3} onPlaceMoved={handlePlaceMoved} />
+      <ItineraryPanel
+        places={places}
+        tripDays={3}
+        onPlaceMoved={handlePlaceMoved}
+        onPlaceEdit={handleMarkerClick}
+      />
+      
+      {unassignedCount > 0 && (
+        <button
+          onClick={handleGenerateItinerary}
+          disabled={isGenerating}
+          className="fixed bottom-8 right-8 z-20 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-200 font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ marginRight: '340px' }}
+        >
+          {isGenerating ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Generating...
+            </>
+          ) : (
+            <>
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
+              Generate Itinerary ({unassignedCount})
+            </>
+          )}
+        </button>
+      )}
+
       <PlaceModal
         place={selectedPlace}
         isOpen={isModalOpen}

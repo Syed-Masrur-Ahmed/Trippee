@@ -75,7 +75,7 @@ function DraggablePlace({
           )}
           <div className="flex-1 min-w-0">
             <div className="font-medium text-sm">{place.name}</div>
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-xs text-gray-700 mt-1">
               {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
             </div>
           </div>
@@ -245,7 +245,7 @@ export default function ItineraryPanel({
             <div className="px-4 pb-4 max-h-64 overflow-y-auto">
               <DroppableZone id="unassigned">
                 {unassignedPlaces.length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No unassigned places</p>
+                  <p className="text-sm text-gray-600 italic">No unassigned places</p>
                 ) : (
                   unassignedPlaces.map((place) => (
                     <DraggablePlace
@@ -269,7 +269,7 @@ export default function ItineraryPanel({
               </h3>
               <DroppableZone id={`day-${day}`}>
                 {!dayGroups[day] || dayGroups[day].length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No places assigned</p>
+                  <p className="text-sm text-gray-600 italic">No places assigned</p>
                 ) : (
                   dayGroups[day].map((place, index) => (
                     <DraggablePlace

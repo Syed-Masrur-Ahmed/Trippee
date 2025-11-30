@@ -85,7 +85,7 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
   return (
     <div ref={searchRef} className="relative w-full max-w-md">
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-600" />
         <input
           type="text"
           value={query}
@@ -110,7 +110,7 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
             >
               <div className="font-medium text-gray-900">{result.name}</div>
               {result.address && (
-                <div className="text-sm text-gray-500 mt-1">{result.address}</div>
+                <div className="text-sm text-gray-700 mt-1">{result.address}</div>
               )}
             </button>
           ))}
@@ -119,7 +119,7 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
 
       {isOpen && results.length === 0 && !loading && query.length >= 3 && (
         <div className="absolute z-50 w-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 px-4 py-3">
-          <p className="text-sm text-gray-500">No results found</p>
+          <p className="text-sm text-gray-700">No results found</p>
         </div>
       )}
     </div>

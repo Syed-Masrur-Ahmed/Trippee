@@ -19,6 +19,7 @@ interface Cursor {
   lat: number;
   lng: number;
   color: string;
+  user_name?: string;
 }
 
 interface SearchResult {
@@ -105,7 +106,7 @@ export default function MapView({ places, onMapClick, onMarkerClick, cursors = [
                 className="absolute top-5 left-0 text-xs font-semibold px-2 py-1 rounded shadow-lg whitespace-nowrap"
                 style={{ backgroundColor: cursor.color, color: 'white' }}
               >
-                User {cursor.user_id.slice(0, 4)}
+                {cursor.user_name || `User ${cursor.user_id.slice(0, 4)}`}
               </div>
             </div>
           </Marker>

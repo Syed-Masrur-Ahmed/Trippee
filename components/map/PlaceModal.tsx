@@ -62,7 +62,7 @@ export default function PlaceModal({ place, isOpen, onClose, onSave, onDelete }:
           />
         </div>
 
-        <div className="text-xs text-gray-500 mb-6">
+        <div className="text-xs text-gray-700 mb-6">
           Location: {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
         </div>
 

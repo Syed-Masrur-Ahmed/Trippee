@@ -5,7 +5,7 @@ export type RealtimeEvent =
   | { type: 'place_added'; place: any }
   | { type: 'place_updated'; id: string; updates: any }
   | { type: 'place_deleted'; id: string }
-  | { type: 'cursor_move'; user_id: string; lat: number; lng: number; color: string };
+  | { type: 'cursor_move'; user_id: string; user_name?: string; lat: number; lng: number; color: string };
 
 export function subscribeToTrip(
   tripId: string,

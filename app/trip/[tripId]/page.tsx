@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { getPlaces, createPlace, updatePlace, deletePlace } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import MapView from '@/components/map/MapView';
 import PlaceModal from '@/components/map/PlaceModal';
 import ItineraryPanel from '@/components/itinerary/ItineraryPanel';
 import { subscribeToTrip, broadcastEvent, RealtimeEvent } from '@/lib/supabase/realtime';
 import { getDistance } from '@/lib/utils/geo';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { use } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
 
 interface Place {
   id: string;
@@ -24,10 +27,13 @@ interface Cursor {
   lat: number;
   lng: number;
   color: string;
+  user_name?: string;
 }
 
 export default function TripPage({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params);
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -37,35 +43,44 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
-    loadData();
-    
-    const myUserId = getUserId();
-    const myColor = getUserColor();
-    console.log('My user ID:', myUserId);
-    console.log('My color:', myColor);
-    
-    // Setup realtime subscription
-    const realtimeChannel = subscribeToTrip(tripId, handleRealtimeEvent);
-    setChannel(realtimeChannel);
-    console.log('Subscribed to trip:', tripId);
+    if (!authLoading && !user) {
+      // Redirect to home if not authenticated
+      router.push('/');
+      return;
+    }
 
-    // Broadcast initial cursor position after channel is ready
-    setTimeout(() => {
-      console.log('Broadcasting initial cursor position');
-      broadcastEvent(realtimeChannel, {
-        type: 'cursor_move',
-        user_id: myUserId,
-        lat: 35.6762,
-        lng: 139.6503,
-        color: myColor,
-      });
-    }, 1000);
+    if (user) {
+      loadData();
+      
+      const myUserId = user.id;
+      const myColor = getUserColor(user.id);
+      console.log('My user ID:', myUserId);
+      console.log('My color:', myColor);
+      
+      // Setup realtime subscription
+      const realtimeChannel = subscribeToTrip(tripId, handleRealtimeEvent);
+      setChannel(realtimeChannel);
+      console.log('Subscribed to trip:', tripId);
 
-    // Cleanup on unmount
-    return () => {
-      realtimeChannel.unsubscribe();
-    };
-  }, []);
+      // Broadcast initial cursor position after channel is ready
+      setTimeout(() => {
+        console.log('Broadcasting initial cursor position');
+        broadcastEvent(realtimeChannel, {
+          type: 'cursor_move',
+          user_id: myUserId,
+          user_name: user.user_metadata?.full_name || user.email || 'User',
+          lat: 35.6762,
+          lng: 139.6503,
+          color: myColor,
+        });
+      }, 1000);
+
+      // Cleanup on unmount
+      return () => {
+        realtimeChannel.unsubscribe();
+      };
+    }
+  }, [user, authLoading, tripId, router]);
 
   async function loadData() {
     const { data } = await getPlaces(tripId);
@@ -101,7 +116,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       case 'cursor_move':
         // Another user moved their cursor
         // Don't show our own cursor
-        if (event.user_id === getUserId()) {
+        if (user && event.user_id === user.id) {
           break;
         }
         console.log('Received cursor from:', event.user_id.slice(0, 8), 'at', event.lat, event.lng);
@@ -112,6 +127,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
             lat: event.lat,
             lng: event.lng,
             color: event.color,
+            user_name: event.user_name,
           });
           console.log('Total cursors:', newCursors.size);
           return newCursors;
@@ -120,60 +136,50 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     }
   }
 
-  function getUserId() {
-    if (typeof window === 'undefined') return 'server';
-    
-    let userId = localStorage.getItem('trippee_user_id');
-    if (!userId) {
-      userId = crypto.randomUUID();
-      localStorage.setItem('trippee_user_id', userId);
-    }
-    return userId;
-  }
-
-  function getUserColor() {
-    if (typeof window === 'undefined') return '#000000';
-    
-    let color = localStorage.getItem('trippee_user_color');
-    if (!color) {
-      // Generate a random color for this user
-      const colors = [
-        '#ef4444', // red
-        '#f59e0b', // orange
-        '#10b981', // green
-        '#3b82f6', // blue
-        '#8b5cf6', // purple
-        '#ec4899', // pink
-        '#06b6d4', // cyan
-      ];
-      color = colors[Math.floor(Math.random() * colors.length)];
-      localStorage.setItem('trippee_user_color', color);
-    }
-    return color;
+  function getUserColor(userId: string) {
+    // Generate consistent color based on user ID
+    const colors = [
+      '#ef4444', // red
+      '#f59e0b', // orange
+      '#10b981', // green
+      '#3b82f6', // blue
+      '#8b5cf6', // purple
+      '#ec4899', // pink
+      '#06b6d4', // cyan
+    ];
+    // Use first character of user ID to pick color consistently
+    const index = parseInt(userId[0], 16) % colors.length;
+    return colors[index];
   }
 
   function handleMapMove(lat: number, lng: number) {
-    if (!channel) return;
+    if (!channel || !user) return;
 
     console.log('Broadcasting cursor at:', lat, lng);
     // Broadcast cursor position (throttled by the caller)
     broadcastEvent(channel, {
       type: 'cursor_move',
-      user_id: getUserId(),
+      user_id: user.id,
+      user_name: user.user_metadata?.full_name || user.email || 'User',
       lat,
       lng,
-      color: getUserColor(),
+      color: getUserColor(user.id),
     });
   }
 
   async function handleMapClick(lat: number, lng: number) {
+    if (!user) {
+      alert('Please sign in to add places');
+      return;
+    }
+
     const newPlace = {
       trip_id: tripId,
       name: 'New Place',
       lat,
       lng,
       category: 'other' as const,
-      created_by: getUserId(),
+      created_by: user.id,
     };
 
     const { data, error } = await createPlace(newPlace);
@@ -193,6 +199,11 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   }
 
   async function handleSearchResult(result: { id: string; name: string; lat: number; lng: number; address?: string }) {
+    if (!user) {
+      alert('Please sign in to add places');
+      return;
+    }
+
     const newPlace = {
       trip_id: tripId,
       name: result.name,
@@ -200,7 +211,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       lng: result.lng,
       category: 'other' as const,
       address: result.address || null,
-      created_by: getUserId(),
+      created_by: user.id,
     };
 
     const { data, error } = await createPlace(newPlace);
@@ -426,10 +437,18 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     }
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-xl">Loading map...</div>
+        <div className="text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-xl">Please sign in to view this trip</div>
       </div>
     );
   }

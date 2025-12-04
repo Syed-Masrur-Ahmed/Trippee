@@ -14,6 +14,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import ShareButton from '@/components/trip/ShareButton';
 import GroupChat from '@/components/ai/GroupChat';
+import TripSettingsModal from '@/components/trip/TripSettingsModal';
 
 interface Place {
   id: string;
@@ -45,6 +46,8 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [trip, setTrip] = useState<{ start_date?: string | null; end_date?: string | null; trip_days?: number | null } | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -145,11 +148,18 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     const { data } = await getPlaces(tripId);
     setPlaces(data || []);
     
-    // Load trip data to check ownership
+    // Load trip data to check ownership and get trip settings
     if (user) {
-      const { data: trip } = await getTrip(tripId);
-      const tripData = trip as { created_by?: string } | null;
-      setIsOwner(tripData?.created_by === user.id);
+      const { data: tripData } = await getTrip(tripId);
+      const trip = tripData as { 
+        created_by?: string; 
+        start_date?: string | null; 
+        end_date?: string | null; 
+        trip_days?: number | null;
+      } | null;
+      
+      setIsOwner(trip?.created_by === user.id);
+      setTrip(trip || null);
     }
     
     setLoading(false);
@@ -460,12 +470,22 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       }
 
       // Normal case: 3+ unassigned places, use full clustering
+      // Use trip_days from trip settings, or calculate from dates, or default to 3
+      let tripDays = 3;
+      if (trip?.trip_days) {
+        tripDays = trip.trip_days;
+      } else if (trip?.start_date && trip?.end_date) {
+        const start = new Date(trip.start_date);
+        const end = new Date(trip.end_date);
+        tripDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      }
+
       const response = await fetch('/api/ai/generate-itinerary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           places: unassignedPlaces,
-          tripDays: 3,
+          tripDays,
         }),
       });
 
@@ -525,6 +545,34 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   return (
     <>
       <div className="fixed top-20 right-4 z-30 flex gap-2">
+        {isOwner && (
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
+            title="Trip Settings"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+            Settings
+          </button>
+        )}
         <button
           onClick={() => setIsChatOpen(!isChatOpen)}
           className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
@@ -557,9 +605,23 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       />
       <ItineraryPanel
         places={places}
-        tripDays={3}
+        tripDays={
+          trip?.trip_days || 
+          (trip?.start_date && trip?.end_date
+            ? Math.ceil((new Date(trip.end_date).getTime() - new Date(trip.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+            : 3)
+        }
         onPlaceMoved={handlePlaceMoved}
         onPlaceEdit={handleMarkerClick}
+      />
+      
+      <TripSettingsModal
+        tripId={tripId}
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        initialStartDate={trip?.start_date}
+        initialEndDate={trip?.end_date}
+        onUpdate={loadData}
       />
       
       {unassignedCount > 0 && (

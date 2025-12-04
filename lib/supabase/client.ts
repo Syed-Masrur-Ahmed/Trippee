@@ -38,3 +38,10 @@ export async function createTrip(trip: Database['public']['Tables']['trips']['In
   return supabase.from('trips').insert(trip).select().single();
 }
 
+export async function updateTrip(
+  id: string,
+  updates: Database['public']['Tables']['trips']['Update']
+) {
+  return supabase.from('trips').update(updates).eq('id', id).select().single();
+}
+

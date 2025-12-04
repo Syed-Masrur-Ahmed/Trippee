@@ -209,21 +209,38 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
     // Load profiles for users
     let profilesMap = new Map();
     if (userIds.length > 0) {
-      const { data: profilesData } = await supabase
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .in('id', userIds);
       
+      if (profilesError) {
+        console.error('Error loading profiles:', profilesError);
+      }
+      
       if (profilesData) {
+        console.log('Loaded profiles:', profilesData.length, 'for user IDs:', userIds);
         profilesMap = new Map(profilesData.map((p: any) => [p.id, p]));
+        // Log each profile for debugging
+        profilesData.forEach((p: any) => {
+          console.log(`Profile for ${p.id}:`, { full_name: p.full_name, email: p.email });
+        });
+      } else {
+        console.warn('No profiles found for user IDs:', userIds);
       }
     }
 
     // Combine messages with profiles
-    const messagesWithProfiles = messagesData.map((msg: any) => ({
-      ...msg,
-      profiles: msg.user_id ? profilesMap.get(msg.user_id) : undefined,
-    }));
+    const messagesWithProfiles = messagesData.map((msg: any) => {
+      const profile = msg.user_id ? profilesMap.get(msg.user_id) : undefined;
+      if (msg.user_id && !profile) {
+        console.warn('No profile found for user ID:', msg.user_id, 'in message:', msg.id);
+      }
+      return {
+        ...msg,
+        profiles: profile,
+      };
+    });
 
     setMessages(messagesWithProfiles);
     setLoading(false);

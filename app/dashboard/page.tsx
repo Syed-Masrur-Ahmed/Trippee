@@ -94,6 +94,24 @@ export default function DashboardPage() {
 
     setCreating(true);
     try {
+      // Ensure user profile exists (in case trigger didn't fire)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile) {
+        // Create profile if it doesn't exist
+        await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email || '',
+            full_name: user.user_metadata?.full_name || user.email || 'User',
+          } as any);
+      }
+
       const { data, error } = await supabase
         .from('trips')
         .insert({

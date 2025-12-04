@@ -112,6 +112,20 @@ export default function DashboardPage() {
         console.error('Error hint:', error.hint);
         alert(`Failed to create trip: ${error.message || 'Unknown error'}. Please check the console for details.`);
       } else if (data) {
+        // Add the creator as a member of the trip
+        const { error: memberError } = await supabase
+          .from('trip_members')
+          .insert({
+            trip_id: data.id,
+            user_id: user.id,
+            role: 'owner',
+          } as any);
+
+        if (memberError) {
+          console.error('Error adding creator to trip_members:', memberError);
+          // Don't block - trip was created, just log the error
+        }
+        
         router.push(`/trip/${data.id}`);
       }
     } catch (err: any) {

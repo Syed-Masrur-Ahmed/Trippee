@@ -62,10 +62,12 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
   async function performSearch(searchQuery: string) {
     try {
       const response = await fetch(
-        `/api/places/search?q=${encodeURIComponent(searchQuery)}`
+        `/api/places/search?q=${encodeURIComponent(searchQuery)}&limit=5`
       );
       const data = await response.json();
-      setResults(data.results.slice(0, 5));
+      // Handle both error cases and ensure results array exists
+      const results = data.results || [];
+      setResults(results.slice(0, 5)); // Show max 5 in dropdown
       setIsOpen(true);
       setLoading(false);
     } catch (error) {

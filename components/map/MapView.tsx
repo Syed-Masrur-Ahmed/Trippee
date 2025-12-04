@@ -113,7 +113,7 @@ export default function MapView({ places, onMapClick, onMarkerClick, cursors = [
         ))}
       </Map>
 
-      <div className="absolute top-4 left-4 z-10">
+      <div className="absolute top-4 left-4 z-50">
         <SearchBar onSelectResult={handleSearchResult} />
       </div>
     </div>

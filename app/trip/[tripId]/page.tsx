@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getPlaces, createPlace, updatePlace, deletePlace } from '@/lib/supabase/client';
+import { getPlaces, createPlace, updatePlace, deletePlace, getTrip } from '@/lib/supabase/client';
 import { supabase } from '@/lib/supabase/client';
 import MapView from '@/components/map/MapView';
 import PlaceModal from '@/components/map/PlaceModal';
@@ -12,6 +12,8 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { use } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import ShareButton from '@/components/trip/ShareButton';
+import GroupChat from '@/components/ai/GroupChat';
 
 interface Place {
   id: string;
@@ -41,6 +43,8 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [cursors, setCursors] = useState<Map<string, Cursor>>(new Map());
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -62,6 +66,60 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       setChannel(realtimeChannel);
       console.log('Subscribed to trip:', tripId);
 
+      // Subscribe to places table changes (for AI-created places)
+      const placesChannel = supabase
+        .channel(`trip-places:${tripId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'places',
+            filter: `trip_id=eq.${tripId}`,
+          },
+          (payload) => {
+            console.log('New place inserted:', payload.new);
+            const newPlace = payload.new as Place;
+            setPlaces((prev) => {
+              // Check if place already exists (avoid duplicates)
+              if (prev.some((p) => p.id === newPlace.id)) {
+                return prev;
+              }
+              return [...prev, newPlace];
+            });
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'places',
+            filter: `trip_id=eq.${tripId}`,
+          },
+          (payload) => {
+            console.log('Place updated:', payload.new);
+            const updatedPlace = payload.new as Place;
+            setPlaces((prev) =>
+              prev.map((p) => (p.id === updatedPlace.id ? updatedPlace : p))
+            );
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'places',
+            filter: `trip_id=eq.${tripId}`,
+          },
+          (payload) => {
+            console.log('Place deleted:', payload.old);
+            setPlaces((prev) => prev.filter((p) => p.id !== payload.old.id));
+          }
+        )
+        .subscribe();
+
       // Broadcast initial cursor position after channel is ready
       setTimeout(() => {
         console.log('Broadcasting initial cursor position');
@@ -78,6 +136,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       // Cleanup on unmount
       return () => {
         realtimeChannel.unsubscribe();
+        placesChannel.unsubscribe();
       };
     }
   }, [user, authLoading, tripId, router]);
@@ -85,6 +144,14 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   async function loadData() {
     const { data } = await getPlaces(tripId);
     setPlaces(data || []);
+    
+    // Load trip data to check ownership
+    if (user) {
+      const { data: trip } = await getTrip(tripId);
+      const tripData = trip as { created_by?: string } | null;
+      setIsOwner(tripData?.created_by === user.id);
+    }
+    
     setLoading(false);
   }
 
@@ -457,6 +524,29 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
   return (
     <>
+      <div className="fixed top-20 right-4 z-30 flex gap-2">
+        <button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          {isChatOpen ? 'Close Chat' : 'Open Chat'}
+        </button>
+        <ShareButton tripId={tripId} isOwner={isOwner} />
+      </div>
+      <GroupChat tripId={tripId} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
       <MapView 
         places={places} 
         onMapClick={handleMapClick}

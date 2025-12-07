@@ -33,7 +33,7 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
 
   const { input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: `/api/trips/${tripId}/chat`,
-    onFinish: async (message: { content: string; toolInvocations?: Array<{ toolName: string; result?: { results?: Array<{ name: string; lat: number; lng: number; category?: string }> } }> }) => {
+    onFinish: async (message: { content: string; toolInvocations?: Array<{ toolName: string; result?: { results?: Array<{ id?: string; name: string; lat: number; lng: number; category?: string }> } }> }) => {
       console.log('GroupChat onFinish called with:', {
         contentLength: message.content?.length,
         hasToolInvocations: !!message.toolInvocations,
@@ -51,84 +51,106 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
           console.log('Processing invocation:', invocation.toolName, 'Result:', invocation.result);
           if (invocation.toolName === 'search_places') {
             console.log('Found search_places invocation, result structure:', JSON.stringify(invocation.result, null, 2));
-            // The result should have a 'results' array
-            let results: Array<{ name: string; lat: number; lng: number; category?: string }> = [];
             
-            if (invocation.result?.results && Array.isArray(invocation.result.results)) {
-              results = invocation.result.results;
-            } else if (Array.isArray(invocation.result)) {
-              results = invocation.result;
+            // Get results and requested limit from tool invocation
+            // The tool returns: { success, placesAdded, message, allResults, requestedLimit }
+            let results: Array<{ id?: string; name: string; lat: number; lng: number; category?: string }> = [];
+            let requestedLimit: number | undefined = undefined;
+            
+            const toolResult = invocation.result;
+            
+            // Check for allResults (new format)
+            if (toolResult?.allResults && Array.isArray(toolResult.allResults)) {
+              results = toolResult.allResults;
+              requestedLimit = toolResult.requestedLimit;
+            } 
+            // Check for results array (old format)
+            else if (toolResult?.results && Array.isArray(toolResult.results)) {
+              results = toolResult.results;
+              requestedLimit = toolResult.requestedLimit;
+            } 
+            // Check if result is directly an array
+            else if (Array.isArray(toolResult)) {
+              results = toolResult;
+            }
+            // If we have requestedLimit but no results, try to get allResults
+            else if (toolResult?.requestedLimit && toolResult?.allResults) {
+              results = Array.isArray(toolResult.allResults) ? toolResult.allResults : [];
+              requestedLimit = toolResult.requestedLimit;
             }
             
-            console.log('Places to add:', results.length);
-            console.log('First place sample:', results[0] ? JSON.stringify(results[0], null, 2) : 'none');
+            console.log(`[Client] Processing ${results.length} results, requestedLimit: ${requestedLimit}`);
+            
+            if (results.length === 0) {
+              console.warn('[Client] No results found in tool invocation. Tool result:', toolResult);
+            }
             
             if (results.length > 0) {
-              // Auto-add places to map
-              for (const place of results.slice(0, 3)) {
-                // Validate place data before creating
-                if (!place || typeof place !== 'object') {
-                  console.error('Invalid place data:', place);
+              // Fetch existing places for duplicate checking
+              const { data: existingPlaces } = await supabase
+                .from('places')
+                .select('name, lat, lng, place_id')
+                .eq('trip_id', tripId);
+              
+              // Map category to database-allowed values
+              const mapCategory = (cat: string | undefined): string => {
+                if (!cat) return 'other';
+                const normalized = cat.toLowerCase();
+                if (normalized.includes('restaurant') || normalized.includes('cafe') || 
+                    normalized.includes('coffee') || normalized.includes('bar') ||
+                    normalized.includes('food') || normalized.includes('dining')) return 'restaurant';
+                if (normalized.includes('hotel') || normalized.includes('lodging')) return 'hotel';
+                if (normalized.includes('store') || normalized.includes('shop') || normalized.includes('shopping')) return 'shopping';
+                if (normalized.includes('station') || normalized.includes('transport')) return 'transport';
+                if (normalized.includes('museum') || normalized.includes('park') || 
+                    normalized.includes('attraction') || normalized.includes('landmark')) return 'attraction';
+                return 'other';
+              };
+              
+              // Check for duplicates (strict matching)
+              const isDuplicate = (place: { id?: string; name: string; lat: number; lng: number }) => {
+                if (!existingPlaces || existingPlaces.length === 0) return false;
+                const placeName = place.name.toLowerCase().trim();
+                return existingPlaces.some((existing) => {
+                  // Check by place_id
+                  if (place.id && existing.place_id && place.id === existing.place_id) return true;
+                  // Check by exact name and coordinates (very strict)
+                  const existingName = (existing.name || '').toLowerCase().trim();
+                  if (existingName === placeName) {
+                    const latMatch = Math.abs(existing.lat - place.lat) < 0.00001;
+                    const lngMatch = Math.abs(existing.lng - place.lng) < 0.00001;
+                    if (latMatch && lngMatch) return true;
+                  }
+                  return false;
+                });
+              };
+              
+              const maxToAdd = requestedLimit !== undefined ? requestedLimit : results.length;
+              let addedCount = 0;
+              
+              // Process results, adding non-duplicates up to the limit
+              for (const place of results) {
+                if (addedCount >= maxToAdd) break;
+                if (!place || !place.name || place.name === 'undefined' || (place.lat === 0 && place.lng === 0)) continue;
+                
+                // Check for duplicates
+                if (isDuplicate({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })) {
                   continue;
                 }
                 
-                const placeName = place.name || 'Unknown Place';
-                const placeLat = typeof place.lat === 'number' ? place.lat : 0;
-                const placeLng = typeof place.lng === 'number' ? place.lng : 0;
-                
-                if (!placeName || placeName === 'undefined' || placeName === 'Unknown Place') {
-                  console.error('Invalid place name:', placeName, 'Full place data:', JSON.stringify(place, null, 2));
-                  continue;
-                }
-                
-                if (placeLat === 0 && placeLng === 0) {
-                  console.error('Invalid coordinates:', placeLat, placeLng, 'Full place data:', JSON.stringify(place, null, 2));
-                  continue;
-                }
-                
-                // Map category to database-allowed values
-                const mapCategory = (cat: string | undefined): string => {
-                  if (!cat) return 'other';
-                  const normalized = cat.toLowerCase();
-                  
-                  // Allowed categories: 'restaurant', 'attraction', 'hotel', 'shopping', 'transport', 'other'
-                  if (normalized.includes('restaurant') || normalized.includes('cafe') || 
-                      normalized.includes('coffee') || normalized.includes('bar') ||
-                      normalized.includes('food') || normalized.includes('dining')) {
-                    return 'restaurant';
-                  }
-                  if (normalized.includes('hotel') || normalized.includes('lodging')) {
-                    return 'hotel';
-                  }
-                  if (normalized.includes('store') || normalized.includes('shop') || normalized.includes('shopping')) {
-                    return 'shopping';
-                  }
-                  if (normalized.includes('station') || normalized.includes('transport')) {
-                    return 'transport';
-                  }
-                  if (normalized.includes('museum') || normalized.includes('park') || 
-                      normalized.includes('attraction') || normalized.includes('landmark')) {
-                    return 'attraction';
-                  }
-                  return 'other';
-                };
-                
-                const mappedCategory = mapCategory(place.category);
-                console.log('Adding place:', placeName, placeLat, placeLng, 'Category:', place.category, '-> Mapped:', mappedCategory);
                 try {
-                  const { data: createdPlace, error: createError } = await createPlace({
+                  const { error: createError } = await createPlace({
                     trip_id: tripId,
-                    name: placeName,
-                    lat: placeLat,
-                    lng: placeLng,
-                    category: mappedCategory,
+                    name: place.name,
+                    lat: place.lat,
+                    lng: place.lng,
+                    category: mapCategory(place.category),
+                    place_id: place.id || null,
                     created_by: user?.id || null,
                   });
                   
-                  if (createError) {
-                    console.error('Failed to create place:', createError);
-                  } else {
-                    console.log('Place created successfully:', createdPlace ? (createdPlace as any).name : 'unknown');
+                  if (!createError) {
+                    addedCount++;
                   }
                 } catch (error) {
                   console.error('Error creating place:', error);

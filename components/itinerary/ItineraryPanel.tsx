@@ -74,7 +74,7 @@ function DraggablePlace({
             </span>
           )}
           <div className="flex-1 min-w-0">
-            <div className="font-medium text-sm">{place.name}</div>
+            <div className="font-medium text-sm text-black">{place.name}</div>
             <div className="text-xs text-gray-700 mt-1">
               {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
             </div>

@@ -3,7 +3,7 @@ import { generateText } from 'ai';
 import { createClient } from '@/lib/supabase/server'; // For Cookie Auth
 import { createClient as createClientJS } from '@supabase/supabase-js'; // For Header Auth
 import { NextRequest, NextResponse } from 'next/server';
-import { searchPlacesTool } from '@/lib/ai/tools';
+import { createSearchPlacesTool, createGetPlaceInfoTool } from '@/lib/ai/tools';
 
 export async function POST(
   request: NextRequest,
@@ -125,12 +125,29 @@ IMPORTANT: After using the search_places tool, you MUST provide a text response 
 - **Local Insights**: Share knowledge about destinations, culture, transportation, and best practices
 
 ## Your Behavior
-1. **When users ask for places**: Use the search_places tool to find options, then explain your recommendations. The search_places tool accepts queries that can include:
-   - Location names (e.g., "Shibuya", "Tokyo", "Kyoto")
-   - Categories (e.g., "cafes", "restaurants", "museums", "temples")
-   - Combined queries (e.g., "cafes in Shibuya", "sushi restaurants Tokyo", "temples Kyoto")
+1. **When users ask for places**: Use the search_places tool to find and add places. The tool returns a success message with the number of places added - it does NOT return place names or details.
    
-2. **When users ask for planning advice**: Provide helpful guidance on:
+   **IMPORTANT - Quantity Detection**: Pay close attention to the number of places the user wants:
+   - If they say "find me a cafe" or "find me one cafe" → use limit=1
+   - If they say "find me cafes" (no number) → use limit=3 (reasonable default)
+   - If they say "find me 5 cafes" or "find me 10 restaurants" → extract the number and use that as the limit
+   - Always match the user's intent for quantity - if they specify a number, use it exactly
+   
+   **CRITICAL - Response Format**: When you use the search_places tool:
+   - The tool returns a success message with placesAdded count - you do NOT see place names
+   - Your response MUST be friendly and brief: "Great! I've added [X] place(s) to your itinerary. Check the itinerary panel on the right to see [it/them]! 🗺️"
+   - Replace [X] with the number from the tool's placesAdded field
+   - Use "it" for 1 place, "them" for multiple places
+   - NEVER mention place names - you don't have access to them
+   - NEVER say "I found X places" or "Here are some options"
+   
+2. **When users ask about specific places**: Use the get_place_info tool to provide detailed information:
+   - If they ask "Tell me about [place name]", "What is [place name]?", "Give me info about [place name]"
+   - If they ask about a place that's already in their itinerary (e.g., "Tell me about the first place on Day 1")
+   - The tool will return detailed information including address, rating, reviews, opening hours, photos, etc.
+   - Share this information in a helpful, conversational way
+   
+3. **When users ask for planning advice**: Provide helpful guidance on:
    - Itinerary structure and day-by-day planning
    - Best times to visit attractions
    - Transportation options and routes
@@ -148,10 +165,11 @@ IMPORTANT: After using the search_places tool, you MUST provide a text response 
 - Trip ID: ${tripId}
 - Current places on map: ${places?.length || 0}
 
-Remember: You're helping real people plan real trips. Be practical, friendly, and considerate of different travel styles and preferences. If you add places to the map using the search_places tool, mention them in your response.`,
+Remember: You're helping real people plan real trips. Be practical, friendly, and considerate of different travel styles and preferences. When you add places using the search_places tool, do NOT mention specific place names - just tell the user to check the itinerary panel.`,
       messages,
       tools: {
-        search_places: searchPlacesTool,
+        search_places: createSearchPlacesTool(tripId),
+        get_place_info: createGetPlaceInfoTool(tripId),
       },
     });
 
@@ -160,36 +178,36 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
     if (lastStep && (lastStep as any).finishReason === 'tool-calls' && !result.text) {
       console.log('AI finished with tool calls but no text, generating fallback response...');
       
-      // Extract places from tool results to create a helpful message
-      const places: any[] = [];
+      // Check tool results for placesAdded (new format) or results (old format)
+      let placesAdded = 0;
       if (result.steps) {
         for (const step of result.steps) {
           if ((step as any).content) {
             for (const item of (step as any).content) {
-              if (item.type === 'tool-result' && item.output?.value?.results) {
-                places.push(...item.output.value.results);
-              } else if (item.type === 'tool-result' && item.output?.results) {
-                places.push(...item.output.results);
+              if (item.type === 'tool-result') {
+                const output = item.output?.value || item.output;
+                if (output?.placesAdded) {
+                  placesAdded = output.placesAdded;
+                } else if (output?.results && Array.isArray(output.results)) {
+                  placesAdded = output.results.length;
+                }
               }
             }
           }
         }
       }
       
-      // Generate a simple text response about the places found
-      if (places.length > 0) {
-        const placeNames = places.slice(0, 3).map(p => p.name).join(', ');
+      // Generate a simple text response
+      if (placesAdded > 0) {
         result = {
           ...result,
-          text: `I found ${places.length} place${places.length > 1 ? 's' : ''} for you! Here are some options: ${placeNames}. I've added the top ${Math.min(places.length, 3)} to your map.`,
+          text: `Great! I've added ${placesAdded} place${placesAdded > 1 ? 's' : ''} to your itinerary. Check the itinerary panel on the right to see ${placesAdded > 1 ? 'them' : 'it'}! 🗺️`,
         } as typeof result;
-        console.log('Generated fallback response with places');
       } else {
         result = {
           ...result,
-          text: "I searched for places but couldn't find any results. Try a different search query!",
+          text: "I couldn't find any places matching your search. Try a different location or category!",
         } as typeof result;
-        console.log('Generated fallback response - no places found');
       }
     }
 
@@ -210,7 +228,7 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
                 for (const toolCall of toolCalls) {
                     const matchingResult = toolResults.find((tr: any) => tr.toolCallId === toolCall.toolCallId);
                     if (matchingResult) {
-                        // Extract result from output.value.results or output.results
+                        // Extract result from output.value or output directly
                         let toolResult = matchingResult.output;
                         console.log('Raw tool result:', JSON.stringify(toolResult, null, 2));
                         
@@ -219,14 +237,22 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
                             toolResult = toolResult.value;
                         }
                         
-                        // Ensure we have the results array
-                        if (toolResult && !toolResult.results && Array.isArray(toolResult)) {
-                            // If toolResult is directly an array, wrap it
-                            toolResult = { results: toolResult };
-                        } else if (toolResult && !toolResult.results) {
-                            // If toolResult is an object but no results key, check if it's the data itself
-                            console.warn('Tool result missing results array, structure:', Object.keys(toolResult || {}));
-                            toolResult = { results: [] };
+                        // Preserve the full tool result structure (includes allResults, results, requestedLimit, etc.)
+                        // The tool returns: { success, placesAdded, message, results, allResults, requestedLimit }
+                        // We want to pass this through to the client as-is
+                        if (Array.isArray(toolResult)) {
+                            // If toolResult is directly an array, wrap it but preserve it
+                            toolResult = { results: toolResult, allResults: toolResult };
+                        } else if (toolResult && typeof toolResult === 'object') {
+                            // Ensure results and allResults are both present
+                            if (toolResult.allResults && !toolResult.results) {
+                                toolResult.results = toolResult.allResults;
+                            } else if (toolResult.results && !toolResult.allResults) {
+                                toolResult.allResults = toolResult.results;
+                            }
+                        } else {
+                            // Fallback: empty structure
+                            toolResult = { results: [], allResults: [] };
                         }
                         
                         // Validate results array structure

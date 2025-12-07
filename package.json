@@ -17,12 +17,14 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
     "ai": "^5.0.104",
+    "jspdf": "^3.0.4",
     "lucide-react": "^0.555.0",
     "mapbox-gl": "^3.16.0",
     "next": "16.0.5",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-map-gl": "^8.1.0",
+    "resend": "^6.5.2",
     "zod": "^4.1.13"
   },
   "devDependencies": {

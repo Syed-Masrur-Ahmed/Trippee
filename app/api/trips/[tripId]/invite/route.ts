@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createClientJS } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { Resend } from 'resend';
+import { getInvitationEmailHTML, getInvitationEmailText } from '@/lib/email/templates';
 
 export async function POST(
   request: NextRequest,
@@ -44,7 +46,7 @@ export async function POST(
   // Verify user is trip owner or member with permission
   const { data: trip } = await supabase
     .from('trips')
-    .select('id, created_by')
+    .select('id, name, created_by')
     .eq('id', tripId)
     .single();
 
@@ -52,8 +54,9 @@ export async function POST(
     return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
   }
 
+  const tripData = trip as { id: string; name: string; created_by: string };
+
   // Check if user is trip owner
-  const tripData = trip as { id: string; created_by: string };
   const isOwner = tripData.created_by === user.id;
   
   // Check if user is already a member
@@ -119,13 +122,46 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // TODO: Send email with invitation link
-  // For now, return invitation token
   const invitationData = invitation as { token: string };
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const inviteLink = `${baseUrl}/invite/${invitationData.token}`;
+
+  // Get inviter's name for email
+  const { data: inviterProfile } = await supabase
+    .from('profiles')
+    .select('full_name, email')
+    .eq('id', user.id)
+    .single();
+
+  const inviterName = inviterProfile?.full_name || inviterProfile?.email?.split('@')[0] || 'Someone';
+
+  // Send email invitation
+  try {
+    if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      
+      await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL || 'Trippee <onboarding@resend.dev>',
+        to: email,
+        subject: `You've been invited to collaborate on ${tripData.name}`,
+        html: getInvitationEmailHTML(tripData.name, inviterName, inviteLink),
+        text: getInvitationEmailText(tripData.name, inviterName, inviteLink),
+      });
+
+      console.log(`Invitation email sent to ${email}`);
+    } else {
+      console.warn('RESEND_API_KEY not set, skipping email send. Invite link:', inviteLink);
+    }
+  } catch (emailError: any) {
+    console.error('Error sending invitation email:', emailError);
+    // Don't fail the request if email fails - still return the invitation
+    // The user can still copy the link manually
+  }
+
   return NextResponse.json({
     invitation,
-    inviteLink: `${baseUrl}/invite/${invitationData.token}`,
+    inviteLink,
+    emailSent: !!process.env.RESEND_API_KEY,
   });
 }
 

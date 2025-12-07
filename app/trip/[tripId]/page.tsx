@@ -48,6 +48,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [trip, setTrip] = useState<{ start_date?: string | null; end_date?: string | null; trip_days?: number | null } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [resetExistingItinerary, setResetExistingItinerary] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -380,22 +381,111 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     }
   }
 
-  async function handleGenerateItinerary() {
-    // Get only unassigned places (get current state)
-    const currentPlaces = places;
-    const unassignedPlaces = currentPlaces.filter((p) => p.day_assigned === null);
+  async function handleDownloadItinerary() {
+    try {
+      // Get session token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Please sign in to download the itinerary');
+        return;
+      }
 
-    if (unassignedPlaces.length === 0) {
-      alert('No unassigned places to organize. Add more places or drag them back to "Unassigned" first.');
-      return;
+      const response = await fetch(`/api/trips/${tripId}/download`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        // Try to parse error as JSON, but handle if it's not JSON
+        let errorMessage = 'Failed to download itinerary';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${trip?.name || 'trip'}_itinerary.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Failed to download itinerary:', error);
+      alert(error.message || 'Failed to download itinerary. Please try again.');
     }
+  }
 
+  async function handleGenerateItinerary() {
     setIsGenerating(true);
 
     try {
+      // Get current places
+      let placesToUse = places;
+      
+      // If reset is enabled, unassign all places first
+      if (resetExistingItinerary) {
+        try {
+          // Unassign all places
+          const resetPromises = places.map(async (place) => {
+            if (place.day_assigned !== null) {
+              await updatePlace(place.id, {
+                day_assigned: null,
+                order_index: null,
+              });
+
+              // Broadcast update
+              if (channel) {
+                broadcastEvent(channel, {
+                  type: 'place_updated',
+                  id: place.id,
+                  updates: { day_assigned: null, order_index: null },
+                });
+              }
+            }
+          });
+          
+          await Promise.all(resetPromises);
+          
+          // Reload to get updated state
+          await loadData();
+          
+          // Update placesToUse to reflect the reset (all places are now unassigned)
+          placesToUse = places.map(p => ({ ...p, day_assigned: null, order_index: null }));
+        } catch (error) {
+          console.error('Failed to reset itinerary:', error);
+          setIsGenerating(false);
+          alert('Failed to reset itinerary. Please try again.');
+          return;
+        }
+      }
+
+      // Get unassigned places (after potential reset)
+      const unassignedPlaces = placesToUse.filter((p) => p.day_assigned === null);
+
+      if (unassignedPlaces.length === 0) {
+        alert('No unassigned places to organize. Add more places or drag them back to "Unassigned" first.');
+        setIsGenerating(false);
+        return;
+      }
+
       // Special case: If only 1-2 unassigned places, assign them to nearest existing day
-      if (unassignedPlaces.length < 3) {
-        const assignedPlaces = currentPlaces.filter((p) => p.day_assigned !== null);
+      // (Only if we didn't reset - if we reset, all places are unassigned so we need full clustering)
+      if (unassignedPlaces.length < 3 && !resetExistingItinerary) {
+        const assignedPlaces = places.filter((p) => p.day_assigned !== null);
         
         if (assignedPlaces.length === 0) {
           // No existing itinerary, need at least 3 places to create one
@@ -545,6 +635,26 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   return (
     <>
       <div className="fixed top-20 right-4 z-30 flex gap-2">
+        <button
+          onClick={handleDownloadItinerary}
+          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+          title="Download Itinerary"
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+          Download
+        </button>
         {isOwner && (
           <button
             onClick={() => setIsSettingsOpen(true)}
@@ -624,37 +734,58 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         onUpdate={loadData}
       />
       
-      {unassignedCount > 0 && (
-        <button
-          onClick={handleGenerateItinerary}
-          disabled={isGenerating}
-          className="fixed bottom-8 right-8 z-20 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-200 font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ marginRight: '340px' }}
-        >
-          {isGenerating ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              Generate Itinerary ({unassignedCount})
-            </>
+      {(unassignedCount > 0 || places.some(p => p.day_assigned !== null)) && (
+        <div className="fixed bottom-8 right-8 z-20 flex flex-col items-end gap-3" style={{ marginRight: '340px' }}>
+          {/* Checkbox for reset option */}
+          {places.some(p => p.day_assigned !== null) && (
+            <label className="flex items-center gap-2 bg-white rounded-lg px-4 py-2 shadow-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={resetExistingItinerary}
+                onChange={(e) => setResetExistingItinerary(e.target.checked)}
+                disabled={isGenerating}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-900 font-medium">
+                Reset existing itinerary
+              </span>
+            </label>
           )}
-        </button>
+          
+          {/* Generate button */}
+          <button
+            onClick={handleGenerateItinerary}
+            disabled={isGenerating || (unassignedCount === 0 && !resetExistingItinerary)}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-200 font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+          >
+            {isGenerating ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                {resetExistingItinerary 
+                  ? `Regenerate Itinerary (${places.length})`
+                  : `Generate Itinerary (${unassignedCount})`
+                }
+              </>
+            )}
+          </button>
+        </div>
       )}
 
       <PlaceModal

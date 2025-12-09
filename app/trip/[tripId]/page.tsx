@@ -616,16 +616,16 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
   if (authLoading || loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-xl">Loading...</div>
+      <div className="flex items-center justify-center h-screen" style={{ backgroundColor: 'var(--background)' }}>
+        <div className="text-xl" style={{ color: 'var(--foreground)' }}>Loading...</div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-xl">Please sign in to view this trip</div>
+      <div className="flex items-center justify-center h-screen" style={{ backgroundColor: 'var(--background)' }}>
+        <div className="text-xl" style={{ color: 'var(--foreground)' }}>Please sign in to view this trip</div>
       </div>
     );
   }
@@ -637,7 +637,10 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       <div className="fixed top-20 right-4 z-30 flex gap-2">
         <button
           onClick={handleDownloadItinerary}
-          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+          className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+          style={{ backgroundColor: 'var(--secondary)', color: 'var(--secondary-foreground)' }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           title="Download Itinerary"
         >
           <svg
@@ -658,7 +661,10 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         {isOwner && (
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
+            className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+            style={{ backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--muted)'}
             title="Trip Settings"
           >
             <svg
@@ -685,7 +691,10 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         )}
         <button
           onClick={() => setIsChatOpen(!isChatOpen)}
-          className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
+          className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+          style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -738,15 +747,19 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         <div className="fixed bottom-8 right-8 z-20 flex flex-col items-end gap-3" style={{ marginRight: '340px' }}>
           {/* Checkbox for reset option */}
           {places.some(p => p.day_assigned !== null) && (
-            <label className="flex items-center gap-2 bg-white rounded-lg px-4 py-2 shadow-lg cursor-pointer hover:bg-gray-50 transition-colors">
+            <label className="flex items-center gap-2 rounded-lg px-4 py-2 cursor-pointer transition-colors" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-lg)' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--card)'}>
               <input
                 type="checkbox"
                 checked={resetExistingItinerary}
                 onChange={(e) => setResetExistingItinerary(e.target.checked)}
                 disabled={isGenerating}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-4 h-4 rounded"
+                style={{
+                  accentColor: 'var(--primary)',
+                  borderColor: 'var(--border)'
+                }}
               />
-              <span className="text-sm text-gray-900 font-medium">
+              <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
                 Reset existing itinerary
               </span>
             </label>
@@ -756,11 +769,18 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           <button
             onClick={handleGenerateItinerary}
             disabled={isGenerating || (unassignedCount === 0 && !resetExistingItinerary)}
-            className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-200 font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            className="px-6 py-4 rounded-full transition-all duration-200 font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            style={{
+              backgroundColor: 'var(--primary)',
+              color: 'var(--primary-foreground)',
+              boxShadow: 'var(--shadow-2xl)'
+            }}
+            onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.transform = 'scale(1.05)', e.currentTarget.style.opacity = '0.9')}
+            onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.transform = 'scale(1)', e.currentTarget.style.opacity = '1')}
           >
             {isGenerating ? (
               <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid var(--primary-foreground)', borderTopColor: 'transparent' }} />
                 Generating...
               </>
             ) : (

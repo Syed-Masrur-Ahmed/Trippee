@@ -211,92 +211,51 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
       }
     }
 
-    // Extract Tools from result steps
+    // Extract tool invocations from result steps
     const toolInvocations: Array<{ toolName: string; result?: any }> = [];
-    console.log('AI result steps:', JSON.stringify(result.steps, null, 2));
-    console.log('AI result text:', result.text);
     
     if (result.steps) {
-        for (const step of result.steps) {
-            // Check for content array with tool-call and tool-result items
-            if ((step as any).content && Array.isArray((step as any).content)) {
-                const content = (step as any).content;
-                const toolCalls = content.filter((item: any) => item.type === 'tool-call');
-                const toolResults = content.filter((item: any) => item.type === 'tool-result');
-                
-                // Match tool calls with their results
-                for (const toolCall of toolCalls) {
-                    const matchingResult = toolResults.find((tr: any) => tr.toolCallId === toolCall.toolCallId);
-                    if (matchingResult) {
-                        // Extract result from output.value or output directly
-                        let toolResult = matchingResult.output;
-                        console.log('Raw tool result:', JSON.stringify(toolResult, null, 2));
-                        
-                        // Handle different result structures
-                        if (toolResult?.value) {
-                            toolResult = toolResult.value;
-                        }
-                        
-                        // Preserve the full tool result structure (includes allResults, results, requestedLimit, etc.)
-                        // The tool returns: { success, placesAdded, message, results, allResults, requestedLimit }
-                        // We want to pass this through to the client as-is
-                        if (Array.isArray(toolResult)) {
-                            // If toolResult is directly an array, wrap it but preserve it
-                            toolResult = { results: toolResult, allResults: toolResult };
-                        } else if (toolResult && typeof toolResult === 'object') {
-                            // Ensure results and allResults are both present
-                            if (toolResult.allResults && !toolResult.results) {
-                                toolResult.results = toolResult.allResults;
-                            } else if (toolResult.results && !toolResult.allResults) {
-                                toolResult.allResults = toolResult.results;
-                            }
-                        } else {
-                            // Fallback: empty structure
-                            toolResult = { results: [], allResults: [] };
-                        }
-                        
-                        // Validate results array structure
-                        if (toolResult?.results && Array.isArray(toolResult.results)) {
-                            console.log('Tool result has', toolResult.results.length, 'places');
-                            if (toolResult.results.length > 0) {
-                                console.log('First place in result:', JSON.stringify(toolResult.results[0], null, 2));
-                            }
-                        }
-                        
-                        console.log('Found tool call:', toolCall.toolName, 'Final result structure:', JSON.stringify(toolResult, null, 2));
-                        toolInvocations.push({
-                            toolName: toolCall.toolName,
-                            result: toolResult
-                        });
-                    }
+      for (const step of result.steps) {
+        if ((step as any).content && Array.isArray((step as any).content)) {
+          const content = (step as any).content;
+          const toolCalls = content.filter((item: any) => item.type === 'tool-call');
+          const toolResults = content.filter((item: any) => item.type === 'tool-result');
+          
+          for (const toolCall of toolCalls) {
+            const matchingResult = toolResults.find((tr: any) => tr.toolCallId === toolCall.toolCallId);
+            if (matchingResult) {
+              let toolResult = matchingResult.output?.value || matchingResult.output;
+              
+              // Normalize result structure
+              if (Array.isArray(toolResult)) {
+                toolResult = { results: toolResult };
+              } else if (toolResult && typeof toolResult === 'object') {
+                if (toolResult.allResults && !toolResult.results) {
+                  toolResult.results = toolResult.allResults;
                 }
+              } else {
+                toolResult = { results: [] };
+              }
+              
+              toolInvocations.push({
+                toolName: toolCall.toolName,
+                result: toolResult
+              });
             }
+          }
         }
+      }
     }
-    
-    console.log('Extracted tool invocations:', JSON.stringify(toolInvocations, null, 2));
 
     // Save AI Response
-    if (result.text && result.text.trim()) {
-      const { error: aiMsgError } = await supabase
-        .from('trip_messages')
-        .insert({
-          trip_id: tripId,
-          user_id: null,
-          content: result.text.trim(),
-          role: 'assistant',
-        } as any);
-      
-      if (aiMsgError) {
-        console.error('Failed to save AI message:', aiMsgError);
-      } else {
-        console.log('AI message saved successfully');
-      }
-    } else {
-      console.warn('AI response text is empty:', result.text);
+    if (result.text?.trim()) {
+      await supabase.from('trip_messages').insert({
+        trip_id: tripId,
+        user_id: null,
+        content: result.text.trim(),
+        role: 'assistant',
+      } as any);
     }
-
-    console.log('Returning response with content length:', result.text?.length || 0, 'and tool invocations:', toolInvocations.length);
 
     return NextResponse.json({
       content: result.text || '',

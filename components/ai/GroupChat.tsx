@@ -52,112 +52,67 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
           if (invocation.toolName === 'search_places') {
             console.log('Found search_places invocation, result structure:', JSON.stringify(invocation.result, null, 2));
             
-            // Get results and requested limit from tool invocation
-            // The tool returns: { success, placesAdded, message, allResults, requestedLimit }
-            let results: Array<{ id?: string; name: string; lat: number; lng: number; category?: string }> = [];
-            let requestedLimit: number | undefined = undefined;
-            
             const toolResult = invocation.result;
+            const results = toolResult?.results || toolResult?.allResults || [];
+            const requestedLimit = toolResult?.requestedLimit || results.length;
             
-            // Check for allResults (new format)
-            if (toolResult?.allResults && Array.isArray(toolResult.allResults)) {
-              results = toolResult.allResults;
-              requestedLimit = toolResult.requestedLimit;
-            } 
-            // Check for results array (old format)
-            else if (toolResult?.results && Array.isArray(toolResult.results)) {
-              results = toolResult.results;
-              requestedLimit = toolResult.requestedLimit;
-            } 
-            // Check if result is directly an array
-            else if (Array.isArray(toolResult)) {
-              results = toolResult;
-            }
-            // If we have requestedLimit but no results, try to get allResults
-            else if (toolResult?.requestedLimit && toolResult?.allResults) {
-              results = Array.isArray(toolResult.allResults) ? toolResult.allResults : [];
-              requestedLimit = toolResult.requestedLimit;
-            }
+            if (results.length === 0) return;
             
-            console.log(`[Client] Processing ${results.length} results, requestedLimit: ${requestedLimit}`);
+            // Map category to database-allowed values
+            const mapCategory = (cat: string | undefined): string => {
+              if (!cat) return 'other';
+              const normalized = cat.toLowerCase();
+              if (normalized.includes('restaurant') || normalized.includes('cafe') || 
+                  normalized.includes('coffee') || normalized.includes('bar') ||
+                  normalized.includes('food') || normalized.includes('dining')) return 'restaurant';
+              if (normalized.includes('hotel') || normalized.includes('lodging')) return 'hotel';
+              if (normalized.includes('store') || normalized.includes('shop') || normalized.includes('shopping')) return 'shopping';
+              if (normalized.includes('station') || normalized.includes('transport')) return 'transport';
+              if (normalized.includes('museum') || normalized.includes('park') || 
+                  normalized.includes('attraction') || normalized.includes('landmark')) return 'attraction';
+              return 'other';
+            };
             
-            if (results.length === 0) {
-              console.warn('[Client] No results found in tool invocation. Tool result:', toolResult);
-            }
+            // Fetch existing places for duplicate checking
+            const { data: existingPlaces } = await supabase
+              .from('places')
+              .select('name, lat, lng, place_id')
+              .eq('trip_id', tripId);
             
-            if (results.length > 0) {
-              // Fetch existing places for duplicate checking
-              const { data: existingPlaces } = await supabase
-                .from('places')
-                .select('name, lat, lng, place_id')
-                .eq('trip_id', tripId);
+            const isDuplicate = (place: { id?: string; name: string; lat: number; lng: number }) => {
+              if (!existingPlaces?.length) return false;
+              const placeName = place.name.toLowerCase().trim();
+              return existingPlaces.some((existing) => {
+                if (place.id && existing.place_id && place.id === existing.place_id) return true;
+                const existingName = (existing.name || '').toLowerCase().trim();
+                if (existingName === placeName) {
+                  return Math.abs(existing.lat - place.lat) < 0.00001 && 
+                         Math.abs(existing.lng - place.lng) < 0.00001;
+                }
+                return false;
+              });
+            };
+            
+            let addedCount = 0;
+            for (const place of results) {
+              if (addedCount >= requestedLimit) break;
+              if (!place?.name || place.name === 'undefined' || (place.lat === 0 && place.lng === 0)) continue;
+              if (isDuplicate({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })) continue;
               
-              // Map category to database-allowed values
-              const mapCategory = (cat: string | undefined): string => {
-                if (!cat) return 'other';
-                const normalized = cat.toLowerCase();
-                if (normalized.includes('restaurant') || normalized.includes('cafe') || 
-                    normalized.includes('coffee') || normalized.includes('bar') ||
-                    normalized.includes('food') || normalized.includes('dining')) return 'restaurant';
-                if (normalized.includes('hotel') || normalized.includes('lodging')) return 'hotel';
-                if (normalized.includes('store') || normalized.includes('shop') || normalized.includes('shopping')) return 'shopping';
-                if (normalized.includes('station') || normalized.includes('transport')) return 'transport';
-                if (normalized.includes('museum') || normalized.includes('park') || 
-                    normalized.includes('attraction') || normalized.includes('landmark')) return 'attraction';
-                return 'other';
-              };
-              
-              // Check for duplicates (strict matching)
-              const isDuplicate = (place: { id?: string; name: string; lat: number; lng: number }) => {
-                if (!existingPlaces || existingPlaces.length === 0) return false;
-                const placeName = place.name.toLowerCase().trim();
-                return existingPlaces.some((existing) => {
-                  // Check by place_id
-                  if (place.id && existing.place_id && place.id === existing.place_id) return true;
-                  // Check by exact name and coordinates (very strict)
-                  const existingName = (existing.name || '').toLowerCase().trim();
-                  if (existingName === placeName) {
-                    const latMatch = Math.abs(existing.lat - place.lat) < 0.00001;
-                    const lngMatch = Math.abs(existing.lng - place.lng) < 0.00001;
-                    if (latMatch && lngMatch) return true;
-                  }
-                  return false;
+              try {
+                const { error } = await createPlace({
+                  trip_id: tripId,
+                  name: place.name,
+                  lat: place.lat,
+                  lng: place.lng,
+                  category: mapCategory(place.category),
+                  place_id: place.id || null,
+                  created_by: user?.id || null,
                 });
-              };
-              
-              const maxToAdd = requestedLimit !== undefined ? requestedLimit : results.length;
-              let addedCount = 0;
-              
-              // Process results, adding non-duplicates up to the limit
-              for (const place of results) {
-                if (addedCount >= maxToAdd) break;
-                if (!place || !place.name || place.name === 'undefined' || (place.lat === 0 && place.lng === 0)) continue;
-                
-                // Check for duplicates
-                if (isDuplicate({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })) {
-                  continue;
-                }
-                
-                try {
-                  const { error: createError } = await createPlace({
-                    trip_id: tripId,
-                    name: place.name,
-                    lat: place.lat,
-                    lng: place.lng,
-                    category: mapCategory(place.category),
-                    place_id: place.id || null,
-                    created_by: user?.id || null,
-                  });
-                  
-                  if (!createError) {
-                    addedCount++;
-                  }
-                } catch (error) {
-                  console.error('Error creating place:', error);
-                }
+                if (!error) addedCount++;
+              } catch (error) {
+                console.error('Error creating place:', error);
               }
-            } else {
-              console.warn('No results to add, results array:', results);
             }
           }
         }
@@ -350,16 +305,17 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-xl z-50 flex flex-col">
+    <div className="fixed right-0 top-0 h-full w-96 z-50 flex flex-col" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-xl)' }}>
       {/* Header */}
-      <div className="p-4 border-b flex items-center justify-between">
+      <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
         <div>
-          <h2 className="font-bold text-lg text-gray-900">Trip Chat</h2>
-          <p className="text-sm text-gray-900">Collaborate with your group</p>
+          <h2 className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>Trip Chat</h2>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Collaborate with your group</p>
         </div>
         <button
           onClick={onClose}
-          className="text-gray-900 hover:text-gray-900"
+          style={{ color: 'var(--foreground)' }}
+          className="hover:opacity-70 transition-opacity"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -370,11 +326,11 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? (
-          <div className="text-center text-gray-900">Loading messages...</div>
+          <div className="text-center" style={{ color: 'var(--foreground)' }}>Loading messages...</div>
         ) : messages.length === 0 ? (
-          <div className="text-center text-gray-900">
+          <div className="text-center" style={{ color: 'var(--foreground)' }}>
             <p className="mb-2">Start the conversation!</p>
-            <p className="text-sm">Ask the AI assistant for place recommendations.</p>
+            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Ask the AI assistant for place recommendations.</p>
           </div>
         ) : (
           messages.map((message) => (
@@ -386,38 +342,35 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
             >
               {/* Avatar */}
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${
-                  message.role === 'assistant'
-                    ? 'bg-purple-500 text-white'
-                    : 'bg-blue-500 text-white'
-                }`}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold"
+                style={{
+                  backgroundColor: message.role === 'assistant' ? 'var(--primary)' : 'var(--secondary)',
+                  color: message.role === 'assistant' ? 'var(--primary-foreground)' : 'var(--secondary-foreground)'
+                }}
               >
                 {getSenderInitials(message)}
               </div>
 
               {/* Message Content */}
               <div className={`flex-1 ${message.user_id === user?.id ? 'items-end' : ''}`}>
-                <div className="text-xs text-gray-900 mb-1">
+                <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
                   {getSenderName(message)}
                 </div>
                 <div
-                  className={`rounded-lg p-3 ${
-                    message.role === 'assistant'
-                      ? 'bg-purple-50 border border-purple-200'
+                  className="rounded-lg p-3"
+                  style={{
+                    backgroundColor: message.role === 'assistant'
+                      ? 'var(--muted)'
                       : message.user_id === user?.id
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-100'
-                  }`}
+                      ? 'var(--primary)'
+                      : 'var(--accent)',
+                    border: message.role === 'assistant' ? '1px solid var(--border)' : 'none',
+                    color: message.user_id === user?.id ? 'var(--primary-foreground)' : 'var(--foreground)'
+                  }}
                 >
-                  <p className={`whitespace-pre-wrap ${
-                    message.role === 'assistant'
-                      ? 'text-gray-900'
-                      : message.user_id === user?.id
-                      ? 'text-white'
-                      : 'text-gray-900'
-                  }`}>{message.content}</p>
+                  <p className="whitespace-pre-wrap">{message.content}</p>
                 </div>
-                <div className="text-xs text-gray-900 mt-1">
+                <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
                   {new Date(message.created_at).toLocaleTimeString()}
                 </div>
               </div>
@@ -426,15 +379,15 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
         )}
         {isLoading && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-semibold">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
               AI
             </div>
             <div className="flex-1">
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--muted)', border: '1px solid var(--border)' }}>
                 <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)' }}></div>
+                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)', animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)', animationDelay: '0.2s' }}></div>
                 </div>
               </div>
             </div>
@@ -444,22 +397,32 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSend} className="p-4 border-t">
-        <p className="text-xs text-gray-900 mb-2">
-          Say <span className="font-semibold">"Hey Trippee"</span> to ask the AI assistant
+      <form onSubmit={handleSend} className="p-4" style={{ borderTop: '1px solid var(--border)' }}>
+        <p className="text-xs mb-2" style={{ color: 'var(--muted-foreground)' }}>
+          Say <span className="font-semibold" style={{ color: 'var(--foreground)' }}>"Hey Trippee"</span> to ask the AI assistant
         </p>
         <div className="flex gap-2">
           <input
             value={input}
             onChange={handleInputChange}
             placeholder="Type a message..."
-            className="flex-1 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-700"
+            className="flex-1 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 transition-all"
+            style={{
+              border: '1px solid var(--input)',
+              backgroundColor: 'var(--background)',
+              color: 'var(--foreground)',
+              '--tw-ring-color': 'var(--ring)'
+            }}
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg transition-all disabled:cursor-not-allowed"
+            style={{
+              backgroundColor: isLoading || !input.trim() ? 'var(--muted)' : 'var(--primary)',
+              color: isLoading || !input.trim() ? 'var(--muted-foreground)' : 'var(--primary-foreground)'
+            }}
           >
             Send
           </button>

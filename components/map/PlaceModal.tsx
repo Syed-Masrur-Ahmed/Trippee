@@ -43,12 +43,12 @@ export default function PlaceModal({ place, isOpen, onClose, onSave, onDelete }:
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-4">Edit Place</h2>
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+      <div className="rounded-lg p-6 w-full max-w-md" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-xl)' }}>
+        <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--foreground)' }}>Edit Place</h2>
         
         <div className="mb-4">
-          <label htmlFor="placeName" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="placeName" className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
             Place Name
           </label>
           <input
@@ -57,31 +57,46 @@ export default function PlaceModal({ place, isOpen, onClose, onSave, onDelete }:
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 rounded-lg focus:outline-none focus:ring-2 transition-all"
+            style={{
+              border: '1px solid var(--input)',
+              backgroundColor: 'var(--background)',
+              color: 'var(--foreground)',
+              '--tw-ring-color': 'var(--ring)'
+            }}
             autoFocus
           />
         </div>
 
-        <div className="text-xs text-gray-700 mb-6">
+        <div className="text-xs mb-6" style={{ color: 'var(--muted-foreground)' }}>
           Location: {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
         </div>
 
         <div className="flex gap-3">
           <button
             onClick={handleSave}
-            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            className="flex-1 px-4 py-2 rounded-lg font-semibold transition-colors"
+            style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             Save
           </button>
           <button
             onClick={onClose}
-            className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+            className="flex-1 px-4 py-2 rounded-lg font-semibold transition-colors"
+            style={{ backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--muted)'}
           >
             Cancel
           </button>
           <button
             onClick={handleDelete}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors"
+            className="px-4 py-2 rounded-lg font-semibold transition-colors"
+            style={{ backgroundColor: 'var(--destructive)', color: 'var(--destructive-foreground)' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             Delete
           </button>

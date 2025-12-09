@@ -37,11 +37,9 @@ export function createSearchPlacesTool(tripId: string) {
       const data = await response.json();
       const allResults = data.results || [];
       
-      console.log(`[Tool] Search API returned ${allResults.length} results for query: "${query}"`);
-      
       // Filter duplicates server-side
       let nonDuplicateResults = allResults;
-      if (tripId) {
+      if (tripId && allResults.length > 0) {
         try {
           const supabase = await createClient();
           const { data: existingPlaces } = await supabase
@@ -49,62 +47,36 @@ export function createSearchPlacesTool(tripId: string) {
             .select('name, lat, lng, place_id')
             .eq('trip_id', tripId);
           
-          if (existingPlaces && existingPlaces.length > 0) {
-            console.log(`[Tool] Checking ${allResults.length} results against ${existingPlaces.length} existing places`);
+          if (existingPlaces?.length > 0) {
             nonDuplicateResults = allResults.filter((place: any) => {
-              if (!place || !place.name) return true;
+              if (!place?.name) return true;
               
               const placeName = place.name.toLowerCase().trim();
-              const placeLat = place.lat;
-              const placeLng = place.lng;
-              const placeId = place.id;
-              
               return !existingPlaces.some((existing) => {
-                // Check by place_id (most reliable)
-                if (placeId && existing.place_id && placeId === existing.place_id) {
-                  return true;
-                }
-                // Check by exact name and coordinates (with small tolerance for floating point)
+                if (place.id && existing.place_id && place.id === existing.place_id) return true;
                 const existingName = (existing.name || '').toLowerCase().trim();
                 if (existingName === placeName) {
-                  const latDiff = Math.abs(existing.lat - placeLat);
-                  const lngDiff = Math.abs(existing.lng - placeLng);
-                  // Very small threshold (about 1 meter)
-                  if (latDiff < 0.00001 && lngDiff < 0.00001) {
-                    return true;
-                  }
+                  return Math.abs(existing.lat - place.lat) < 0.00001 && 
+                         Math.abs(existing.lng - place.lng) < 0.00001;
                 }
                 return false;
               });
             });
-            
-            console.log(`[Tool] Filtered ${allResults.length - nonDuplicateResults.length} duplicate(s). ${nonDuplicateResults.length} remaining.`);
-            console.log(`[Tool] Non-duplicate results:`, nonDuplicateResults.map((p: any) => p.name));
           }
         } catch (error) {
           console.error('[Tool] Error filtering duplicates:', error);
         }
       }
       
-      // Return format: AI sees success message, client gets allResults in results field
-      const placesAdded = nonDuplicateResults.slice(0, requestedLimit).length;
+      const placesAdded = Math.min(nonDuplicateResults.length, requestedLimit);
       
-      console.log(`[Tool] Returning: placesAdded=${placesAdded}, allResults.length=${allResults.length}, nonDuplicateResults.length=${nonDuplicateResults.length}, requestedLimit=${requestedLimit}`);
-      
-      // Return allResults in the results field so client can access them
-      // The AI will see the success message, but results array is for client processing
-      const returnValue = {
+      return {
         success: true,
         placesAdded,
         message: `Successfully found ${placesAdded} non-duplicate place(s) and added them to the itinerary.`,
-        // Put allResults in results field so client can access it
         results: allResults,
-        allResults: allResults, // Also include for backwards compatibility
         requestedLimit,
       };
-      
-      console.log(`[Tool] Return value structure:`, JSON.stringify(returnValue, null, 2));
-      return returnValue;
     },
   } as any);
 }
@@ -163,15 +135,11 @@ export function createGetPlaceInfoTool(tripId: string) {
       if (!googlePlaceId && placeName) {
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-          const searchUrl = `${baseUrl}/api/places/search?q=${encodeURIComponent(placeName)}&limit=1`;
-          
-          const searchResponse = await fetch(searchUrl);
+          const searchResponse = await fetch(`${baseUrl}/api/places/search?q=${encodeURIComponent(placeName)}&limit=1`);
           if (searchResponse.ok) {
             const searchData = await searchResponse.json();
-            if (searchData.results && searchData.results.length > 0) {
-              // Use the first result's ID
+            if (searchData.results?.[0]?.id) {
               googlePlaceId = searchData.results[0].id;
-              console.log(`[Tool] Found place via search: ${searchData.results[0].name} (ID: ${googlePlaceId})`);
             }
           }
         } catch (error) {
@@ -179,17 +147,14 @@ export function createGetPlaceInfoTool(tripId: string) {
         }
       }
       
-      // If we have a Google Place ID, fetch detailed info from Google Places API
+      // Fetch detailed info from Google Places API if we have a Place ID
       let googlePlaceDetails = null;
       if (googlePlaceId) {
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-          const url = `${baseUrl}/api/places/details?placeId=${encodeURIComponent(googlePlaceId)}`;
-          
-          const response = await fetch(url);
+          const response = await fetch(`${baseUrl}/api/places/details?placeId=${encodeURIComponent(googlePlaceId)}`);
           if (response.ok) {
-            const data = await response.json();
-            googlePlaceDetails = data;
+            googlePlaceDetails = await response.json();
           }
         } catch (error) {
           console.error('[Tool] Error fetching Google Place details:', error);

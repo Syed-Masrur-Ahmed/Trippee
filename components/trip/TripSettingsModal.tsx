@@ -118,13 +118,16 @@ export default function TripSettingsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+      <div className="rounded-lg w-full max-w-md p-6" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-xl)' }}>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Trip Settings</h2>
+          <h2 className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>Trip Settings</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 transition-colors"
+            className="transition-colors"
+            style={{ color: 'var(--muted-foreground)' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted-foreground)'}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -134,19 +137,25 @@ export default function TripSettingsModal({
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
               Start Date
             </label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg px-4 py-2 focus:outline-none focus:ring-2 transition-all"
+              style={{
+                border: '1px solid var(--input)',
+                backgroundColor: 'var(--background)',
+                color: 'var(--foreground)',
+                '--tw-ring-color': 'var(--ring)'
+              }}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
               End Date
             </label>
             <input
@@ -154,35 +163,51 @@ export default function TripSettingsModal({
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               min={startDate || undefined}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg px-4 py-2 focus:outline-none focus:ring-2 transition-all"
+              style={{
+                border: '1px solid var(--input)',
+                backgroundColor: 'var(--background)',
+                color: 'var(--foreground)',
+                '--tw-ring-color': 'var(--ring)'
+              }}
             />
           </div>
 
           {tripDays > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-gray-700">
+            <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--accent)', border: '1px solid var(--border)' }}>
+              <p className="text-sm" style={{ color: 'var(--foreground)' }}>
                 <span className="font-medium">Trip Duration:</span> {tripDays} {tripDays === 1 ? 'day' : 'days'}
               </p>
             </div>
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--destructive)', border: '1px solid var(--destructive)', opacity: 0.1 }}>
+              <p className="text-sm" style={{ color: 'var(--destructive)' }}>{error}</p>
             </div>
           )}
 
           <div className="flex gap-3 pt-4">
             <button
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2 rounded-lg transition-colors"
+              style={{
+                border: '1px solid var(--border)',
+                color: 'var(--foreground)'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={loading || !startDate || !endDate || tripDays === 0}
-              className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 px-4 py-2 rounded-lg transition-colors disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: loading || !startDate || !endDate || tripDays === 0 ? 'var(--muted)' : 'var(--primary)',
+                color: loading || !startDate || !endDate || tripDays === 0 ? 'var(--muted-foreground)' : 'var(--primary-foreground)'
+              }}
             >
               {loading ? 'Saving...' : 'Save'}
             </button>

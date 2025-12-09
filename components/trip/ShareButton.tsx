@@ -75,7 +75,10 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+        className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+        style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
+        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -96,10 +99,10 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
       </button>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96 max-w-[90vw]">
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+          <div className="p-6 rounded-lg w-96 max-w-[90vw]" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-xl)' }}>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Invite Collaborator</h2>
+              <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>Invite Collaborator</h2>
               <button
                 onClick={() => {
                   setShowModal(false);
@@ -108,7 +111,10 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
                   setSuccess(false);
                   setInviteLink(null);
                 }}
-                className="text-gray-600 hover:text-gray-900"
+                className="transition-colors"
+                style={{ color: 'var(--muted-foreground)' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted-foreground)'}
                 disabled={loading}
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,7 +124,7 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
             </div>
             <form onSubmit={handleInvite}>
               <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="email" className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
                   Email address
                 </label>
                 <input
@@ -127,26 +133,40 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
                   placeholder="friend@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-600"
+                  className="w-full rounded-lg px-4 py-2 focus:outline-none focus:ring-2 transition-all"
+                  style={{
+                    border: '1px solid var(--input)',
+                    backgroundColor: 'var(--background)',
+                    color: 'var(--foreground)',
+                    '--tw-ring-color': 'var(--ring)'
+                  }}
                   required
                   disabled={loading}
                 />
               </div>
               {success && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-700 text-sm font-medium mb-2">Invitation sent!</p>
+                <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--accent)', border: '1px solid var(--border)' }}>
+                  <p className="text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>Invitation sent!</p>
                   {inviteLink && (
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
                         value={inviteLink}
                         readOnly
-                        className="flex-1 text-xs border border-green-300 rounded px-2 py-1 bg-white text-gray-900"
+                        className="flex-1 text-xs rounded px-2 py-1"
+                        style={{
+                          border: '1px solid var(--border)',
+                          backgroundColor: 'var(--background)',
+                          color: 'var(--foreground)'
+                        }}
                       />
                       <button
                         type="button"
                         onClick={copyInviteLink}
-                        className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                        className="px-2 py-1 text-xs rounded transition-colors"
+                        style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                       >
                         Copy
                       </button>
@@ -155,8 +175,8 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
                 </div>
               )}
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-700 text-sm">{error}</p>
+                <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--destructive)', border: '1px solid var(--destructive)', opacity: 0.1 }}>
+                  <p className="text-sm" style={{ color: 'var(--destructive)' }}>{error}</p>
                 </div>
               )}
               <div className="flex gap-2">
@@ -169,7 +189,13 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
                     setSuccess(false);
                     setInviteLink(null);
                   }}
-                  className="flex-1 border border-gray-300 text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 rounded-lg transition-colors"
+                  style={{
+                    border: '1px solid var(--border)',
+                    color: 'var(--foreground)'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   disabled={loading}
                 >
                   Cancel
@@ -177,7 +203,11 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
                 <button
                   type="submit"
                   disabled={loading || !email.trim()}
-                  className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-400 transition-colors"
+                  className="flex-1 px-4 py-2 rounded-lg transition-colors"
+                  style={{
+                    backgroundColor: loading || !email.trim() ? 'var(--muted)' : 'var(--primary)',
+                    color: loading || !email.trim() ? 'var(--muted-foreground)' : 'var(--primary-foreground)'
+                  }}
                 >
                   {loading ? 'Sending...' : 'Send Invite'}
                 </button>

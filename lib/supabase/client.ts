@@ -45,3 +45,15 @@ export async function updateTrip(
   return supabase.from('trips').update(updates).eq('id', id).select().single();
 }
 
+export async function deleteTrip(id: string) {
+  return supabase.from('trips').delete().eq('id', id);
+}
+
+export async function removeUserFromTrip(tripId: string, userId: string) {
+  return supabase
+    .from('trip_members')
+    .delete()
+    .eq('trip_id', tripId)
+    .eq('user_id', userId);
+}
+

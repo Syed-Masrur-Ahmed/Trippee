@@ -69,15 +69,18 @@ export default function AuthModal({ onClose }: AuthModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg w-96 max-w-[90vw]">
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+      <div className="p-6 rounded-lg w-96 max-w-[90vw]" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-xl)' }}>
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">
+          <h2 className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>
             {isSignUp ? 'Sign Up' : 'Sign In'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-700 hover:text-gray-900"
+            className="transition-colors"
+            style={{ color: 'var(--muted-foreground)' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted-foreground)'}
             aria-label="Close"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,7 +96,13 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               placeholder="Full Name (optional)"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full border p-2 rounded"
+              className="w-full p-2 rounded focus:outline-none focus:ring-2 transition-all"
+              style={{
+                border: '1px solid var(--input)',
+                backgroundColor: 'var(--background)',
+                color: 'var(--foreground)',
+                '--tw-ring-color': 'var(--ring)'
+              }}
             />
           )}
           <input
@@ -101,7 +110,13 @@ export default function AuthModal({ onClose }: AuthModalProps) {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border p-2 rounded"
+            className="w-full p-2 rounded focus:outline-none focus:ring-2 transition-all"
+            style={{
+              border: '1px solid var(--input)',
+              backgroundColor: 'var(--background)',
+              color: 'var(--foreground)',
+              '--tw-ring-color': 'var(--ring)'
+            }}
             required
           />
           <input
@@ -109,20 +124,32 @@ export default function AuthModal({ onClose }: AuthModalProps) {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full border p-2 rounded"
+            className="w-full p-2 rounded focus:outline-none focus:ring-2 transition-all"
+            style={{
+              border: '1px solid var(--input)',
+              backgroundColor: 'var(--background)',
+              color: 'var(--foreground)',
+              '--tw-ring-color': 'var(--ring)'
+            }}
             required
             minLength={6}
           />
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {error && <p className="text-sm" style={{ color: 'var(--destructive)' }}>{error}</p>}
           {success && (
-            <p className="text-green-500 text-sm">
+            <p className="text-sm" style={{ color: 'var(--primary)' }}>
               Account created! Check your email to verify your account.
             </p>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+            className="w-full py-2 rounded transition-colors disabled:opacity-50"
+            style={{
+              backgroundColor: 'var(--primary)',
+              color: 'var(--primary-foreground)'
+            }}
+            onMouseEnter={(e) => !loading && (e.currentTarget.style.opacity = '0.9')}
+            onMouseLeave={(e) => !loading && (e.currentTarget.style.opacity = '1')}
           >
             {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
           </button>
@@ -131,16 +158,23 @@ export default function AuthModal({ onClose }: AuthModalProps) {
         <div className="mt-4">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
+              <div className="w-full" style={{ borderTop: '1px solid var(--border)' }}></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-700">Or continue with</span>
+              <span className="px-2" style={{ backgroundColor: 'var(--card)', color: 'var(--muted-foreground)' }}>Or continue with</span>
             </div>
           </div>
           <button
             onClick={handleGoogleAuth}
             disabled={loading}
-            className="w-full mt-4 bg-white border border-gray-300 py-2 rounded flex items-center justify-center gap-2 hover:bg-gray-50 disabled:opacity-50"
+            className="w-full mt-4 py-2 rounded flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+            style={{
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--background)',
+              color: 'var(--foreground)'
+            }}
+            onMouseEnter={(e) => !loading && (e.currentTarget.style.backgroundColor = 'var(--accent)')}
+            onMouseLeave={(e) => !loading && (e.currentTarget.style.backgroundColor = 'var(--background)')}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -164,7 +198,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
           </button>
         </div>
 
-        <p className="mt-4 text-center text-sm text-gray-600">
+        <p className="mt-4 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
           {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
           <button
             onClick={() => {
@@ -172,7 +206,10 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               setError(null);
               setSuccess(false);
             }}
-            className="text-blue-500 hover:text-blue-700"
+            className="transition-colors"
+            style={{ color: 'var(--primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             {isSignUp ? 'Sign In' : 'Sign Up'}
           </button>

@@ -119,21 +119,24 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
 
   if (loading || authLoading || !token) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-gray-700">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--background)' }}>
+        <div className="text-xl" style={{ color: 'var(--foreground)' }}>Loading...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-          <h1 className="text-2xl font-bold mb-4 text-red-600">Invalid Invitation</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--background)' }}>
+        <div className="rounded-lg p-8 max-w-md w-full text-center" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-lg)' }}>
+          <h1 className="text-2xl font-bold mb-4" style={{ color: 'var(--destructive)' }}>Invalid Invitation</h1>
+          <p className="mb-6" style={{ color: 'var(--muted-foreground)' }}>{error}</p>
           <Link
             href="/"
-            className="inline-block px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="inline-block px-4 py-2 rounded transition-colors"
+            style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             Go to Home
           </Link>
@@ -144,24 +147,24 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
 
   if (!invitation) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="text-xl text-gray-700">Loading invitation...</div>
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--background)' }}>
+        <div className="text-xl" style={{ color: 'var(--foreground)' }}>Loading invitation...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
-      <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-        <h1 className="text-2xl font-bold mb-4 text-gray-900">Trip Invitation</h1>
-        <p className="text-gray-700 mb-2">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--background)' }}>
+      <div className="rounded-lg p-8 max-w-md w-full" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-lg)' }}>
+        <h1 className="text-2xl font-bold mb-4" style={{ color: 'var(--foreground)' }}>Trip Invitation</h1>
+        <p className="mb-2" style={{ color: 'var(--muted-foreground)' }}>
           You've been invited to collaborate on:
         </p>
-        <p className="text-xl font-semibold text-blue-600 mb-6">
+        <p className="text-xl font-semibold mb-6" style={{ color: 'var(--primary)' }}>
           {invitation.trips?.name || 'Unknown Trip'}
         </p>
         {!user && (
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm mb-4" style={{ color: 'var(--muted-foreground)' }}>
             Please sign in to accept this invitation.
           </p>
         )}
@@ -169,7 +172,11 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
           <button
             onClick={handleAccept}
             disabled={accepting}
-            className="flex-1 bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-400 transition-colors font-semibold"
+            className="flex-1 py-2 rounded-lg transition-colors font-semibold"
+            style={{
+              backgroundColor: accepting ? 'var(--muted)' : 'var(--primary)',
+              color: accepting ? 'var(--muted-foreground)' : 'var(--primary-foreground)'
+            }}
           >
             {accepting ? 'Accepting...' : user ? 'Accept Invitation' : 'Sign In to Accept'}
           </button>

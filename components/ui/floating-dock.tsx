@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
 
 interface DockItem {
@@ -15,7 +15,7 @@ interface FloatingDockProps {
   mobileClassName?: string;
 }
 
-export function FloatingDock({ items, mobileClassName }: FloatingDockProps) {
+export function FloatingDock({ items }: FloatingDockProps) {
   // Center the dock in the map area (from left edge to left edge of itinerary panel)
   // Map area is calc(100% - 320px), so center is at calc((100% - 320px) / 2)
   return (
@@ -35,11 +35,10 @@ function Dock({ items }: { items: DockItem[] }) {
         boxShadow: 'var(--shadow-lg)',
       }}
     >
-      {items.map((item, idx) => (
+      {items.map((item) => (
         <DockItem
           key={item.title}
           item={item}
-          index={idx}
         />
       ))}
     </div>
@@ -48,10 +47,8 @@ function Dock({ items }: { items: DockItem[] }) {
 
 function DockItem({
   item,
-  index,
 }: {
   item: DockItem;
-  index: number;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [isHovered, setIsHovered] = useState(false);

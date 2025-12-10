@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase/client';
 
 interface ShareButtonProps {
@@ -13,6 +13,14 @@ interface ShareButtonProps {
 
 export default function ShareButton({ tripId, isOwner, open, onOpenChange, showButton = true }: ShareButtonProps) {
   const [internalShowModal, setInternalShowModal] = useState(false);
+  const lastOpenRef = useRef<boolean | undefined>(undefined);
+  
+  // Sync internal state with controlled prop (avoiding useEffect setState)
+  if (open !== undefined && open !== lastOpenRef.current) {
+    lastOpenRef.current = open;
+    setInternalShowModal(open);
+  }
+  
   const showModal = open !== undefined ? open : internalShowModal;
   const setShowModal = onOpenChange || setInternalShowModal;
   const [email, setEmail] = useState('');
@@ -20,12 +28,6 @@ export default function ShareButton({ tripId, isOwner, open, onOpenChange, showB
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open !== undefined) {
-      setInternalShowModal(open);
-    }
-  }, [open]);
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();

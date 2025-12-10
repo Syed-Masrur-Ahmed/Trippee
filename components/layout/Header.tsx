@@ -4,8 +4,17 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import AuthModal from '@/components/auth/AuthModal';
+
+// Hook to safely detect client-side mounting
+function useIsMounted() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+}
 
 export default function Header() {
   const { user, loading } = useAuth();
@@ -14,6 +23,7 @@ export default function Header() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [userFullName, setUserFullName] = useState<string | null>(null);
   const [tripName, setTripName] = useState<string | null>(null);
+  const mounted = useIsMounted();
   
   // Show Dashboard link on trip pages, but not on dashboard page
   const showDashboardLink = pathname?.startsWith('/trip/') && pathname !== '/dashboard';
@@ -43,74 +53,68 @@ export default function Header() {
     return name[0].toUpperCase();
   }
 
-  // Ensure consistent initial render to avoid hydration mismatch
-  // Show loading state initially, then update after hydration
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    async function loadUserProfile() {
-      if (!user) {
-        setUserFullName(null);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
-          .single();
-
-        if (error) {
-          setUserFullName(user.user_metadata?.full_name || user.email || null);
-        } else {
-          setUserFullName((data as any)?.full_name || user.user_metadata?.full_name || user.email || null);
-        }
-      } catch {
-        setUserFullName(user.user_metadata?.full_name || user.email || null);
-      }
+  const loadUserProfile = useCallback(async () => {
+    if (!user) {
+      setUserFullName(null);
+      return;
     }
 
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        setUserFullName(user.user_metadata?.full_name || user.email || null);
+      } else {
+        const profileData = data as { full_name?: string } | null;
+        setUserFullName(profileData?.full_name || user.user_metadata?.full_name || user.email || null);
+      }
+    } catch {
+      setUserFullName(user.user_metadata?.full_name || user.email || null);
+    }
+  }, [user]);
+
+  const loadTripName = useCallback(async () => {
+    if (!tripId || !user) {
+      setTripName(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('trips')
+        .select('name')
+        .eq('id', tripId)
+        .single();
+
+      if (error) {
+        setTripName(null);
+      } else {
+        const tripData = data as { name?: string } | null;
+        setTripName(tripData?.name || null);
+      }
+    } catch {
+      setTripName(null);
+    }
+  }, [tripId, user]);
+
+  useEffect(() => {
     if (mounted && user) {
       loadUserProfile();
     }
-  }, [user, mounted]);
+  }, [user, mounted, loadUserProfile]);
 
   // Load trip name when on trip page
   useEffect(() => {
-    async function loadTripName() {
-      if (!tripId || !user) {
-        setTripName(null);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('trips')
-          .select('name')
-          .eq('id', tripId)
-          .single();
-
-        if (error) {
-          setTripName(null);
-        } else {
-          setTripName((data as any)?.name || null);
-        }
-      } catch {
-        setTripName(null);
-      }
-    }
-
     if (mounted && isTripPage && tripId) {
       loadTripName();
-    } else {
+    } else if (!isTripPage || !tripId) {
       setTripName(null);
     }
-  }, [mounted, isTripPage, tripId, user]);
+  }, [mounted, isTripPage, tripId, loadTripName]);
 
   return (
     <>

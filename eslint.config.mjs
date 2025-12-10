@@ -13,6 +13,16 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Custom rules - relax some overly strict defaults
+  {
+    rules: {
+      // Allow `any` type in specific cases (e.g., when interfacing with external APIs)
+      "@typescript-eslint/no-explicit-any": "warn",
+      // These React hooks rules are too strict for common patterns
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/refs": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

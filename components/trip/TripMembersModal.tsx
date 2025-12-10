@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { useAuth } from '@/lib/hooks/useAuth';
 
 interface TripMembersModalProps {
   tripId: string;
@@ -33,18 +32,11 @@ export default function TripMembersModal({
   isOpen,
   onClose,
 }: TripMembersModalProps) {
-  const { user } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (isOpen) {
-      loadMembers();
-    }
-  }, [isOpen, tripId]);
-
-  async function loadMembers() {
+  const loadMembers = useCallback(async () => {
     setLoading(true);
     try {
       // Get trip info to find host
@@ -71,8 +63,8 @@ export default function TripMembersModal({
       }
 
       // Get profiles for all members
-      const members = (membersData || []) as Array<{ user_id: string }>;
-      const userIds = members.map((m) => m.user_id);
+      const membersList = (membersData || []) as Array<{ user_id: string }>;
+      const userIds = membersList.map((m) => m.user_id);
       
       if (userIds.length > 0) {
         const { data: profilesData } = await supabase
@@ -81,10 +73,14 @@ export default function TripMembersModal({
           .in('id', userIds);
 
         const profilesMap = new Map(
-          (profilesData || []).map((p: any) => [p.id, p])
+          (profilesData || []).map((p: { id: string; full_name?: string | null; email?: string | null }) => [p.id, {
+            id: p.id,
+            full_name: p.full_name ?? null,
+            email: p.email ?? null,
+          }])
         );
 
-        const membersWithProfiles: Member[] = (membersData || []).map((m: any) => ({
+        const membersWithProfiles: Member[] = (membersData || []).map((m: { user_id: string; role: string; joined_at: string }) => ({
           ...m,
           profile: profilesMap.get(m.user_id) || null,
         }));
@@ -98,7 +94,13 @@ export default function TripMembersModal({
     } finally {
       setLoading(false);
     }
-  }
+  }, [tripId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadMembers();
+    }
+  }, [isOpen, loadMembers]);
 
   if (!isOpen) return null;
 

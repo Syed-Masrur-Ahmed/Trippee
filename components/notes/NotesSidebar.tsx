@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { useAuth } from '@/lib/hooks/useAuth';
 
 interface Place {
   id: string;
@@ -23,15 +22,10 @@ interface NotesSidebarProps {
 }
 
 export default function NotesSidebar({ tripId, tripDays = 3, selectedNote, onSelectNote }: NotesSidebarProps) {
-  const { user } = useAuth();
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadPlaces();
-  }, [tripId]);
-
-  async function loadPlaces() {
+  const loadPlaces = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('places')
@@ -48,7 +42,11 @@ export default function NotesSidebar({ tripId, tripDays = 3, selectedNote, onSel
     } finally {
       setLoading(false);
     }
-  }
+  }, [tripId]);
+
+  useEffect(() => {
+    loadPlaces();
+  }, [loadPlaces]);
 
   // Group places by day
   const placesByDay: Record<number, Place[]> = {};

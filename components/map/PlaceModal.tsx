@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 
 interface Place {
   id: string;
@@ -19,12 +19,13 @@ interface PlaceModalProps {
 
 export default function PlaceModal({ place, isOpen, onClose, onSave, onDelete }: PlaceModalProps) {
   const [name, setName] = useState('');
-
-  useEffect(() => {
-    if (place) {
-      setName(place.name);
-    }
-  }, [place]);
+  const lastPlaceIdRef = useRef<string | null>(null);
+  
+  // Sync name when place changes (avoiding useEffect setState)
+  if (place && place.id !== lastPlaceIdRef.current) {
+    lastPlaceIdRef.current = place.id;
+    setName(place.name);
+  }
 
   if (!isOpen || !place) return null;
 

@@ -26,11 +26,12 @@ export default function NotesLayout({ tripId }: NotesLayoutProps) {
         .single();
       
       if (data) {
-        if (data.trip_days) {
-          setTripDays(data.trip_days);
-        } else if (data.start_date && data.end_date) {
-          const start = new Date(data.start_date);
-          const end = new Date(data.end_date);
+        const tripData = data as { trip_days?: number; start_date?: string | null; end_date?: string | null };
+        if (tripData.trip_days) {
+          setTripDays(tripData.trip_days);
+        } else if (tripData.start_date && tripData.end_date) {
+          const start = new Date(tripData.start_date);
+          const end = new Date(tripData.end_date);
           const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
           setTripDays(days);
         }

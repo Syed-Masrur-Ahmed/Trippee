@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search } from 'lucide-react';
 
 interface SearchResult {
@@ -22,6 +22,23 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  const performSearch = useCallback(async (searchQuery: string) => {
+    try {
+      const response = await fetch(
+        `/api/places/search?q=${encodeURIComponent(searchQuery)}&limit=5`
+      );
+      const data = await response.json();
+      // Handle both error cases and ensure results array exists
+      const searchResults = data.results || [];
+      setResults(searchResults.slice(0, 5)); // Show max 5 in dropdown
+      setIsOpen(true);
+      setLoading(false);
+    } catch {
+      setLoading(false);
+      setResults([]);
+    }
+  }, []);
 
   useEffect(() => {
     // Close dropdown when clicking outside
@@ -57,24 +74,7 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
         clearTimeout(debounceTimer.current);
       }
     };
-  }, [query]);
-
-  async function performSearch(searchQuery: string) {
-    try {
-      const response = await fetch(
-        `/api/places/search?q=${encodeURIComponent(searchQuery)}&limit=5`
-      );
-      const data = await response.json();
-      // Handle both error cases and ensure results array exists
-      const results = data.results || [];
-      setResults(results.slice(0, 5)); // Show max 5 in dropdown
-      setIsOpen(true);
-      setLoading(false);
-    } catch {
-      setLoading(false);
-      setResults([]);
-    }
-  }
+  }, [query, performSearch]);
 
   function handleSelectResult(result: SearchResult) {
     onSelectResult(result);

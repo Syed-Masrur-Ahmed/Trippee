@@ -174,7 +174,38 @@ Trippee supports two authentication methods:
 1. **Email/Password** - Traditional signup with email confirmation
 2. **Google OAuth** - One-click Google sign-in
 
-See `AUTH_SETUP.md` and `GOOGLE_OAUTH_SETUP.md` for detailed setup instructions.
+### Setup Instructions
+
+#### Email/Password Authentication
+
+Email/password authentication is automatically configured when you set up Supabase. Ensure your Supabase project has email authentication enabled in the Authentication settings.
+
+#### Google OAuth Setup
+
+1. **Create a Google Cloud Project**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+
+2. **Enable Google+ API**
+   - Navigate to "APIs & Services" > "Library"
+   - Search for "Google+ API" and enable it
+
+3. **Create OAuth 2.0 Credentials**
+   - Go to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "OAuth client ID"
+   - Choose "Web application"
+   - Add authorized redirect URIs:
+     - `https://<your-project-ref>.supabase.co/auth/v1/callback`
+     - `http://localhost:3000/auth/callback` (for local development)
+   - Copy the Client ID and Client Secret
+
+4. **Configure in Supabase**
+   - Go to your Supabase Dashboard > Authentication > Providers
+   - Enable Google provider
+   - Paste your Google Client ID and Client Secret
+   - Save changes
+
+The authentication code is already implemented in the codebase - you just need to configure the providers in Supabase.
 
 ---
 

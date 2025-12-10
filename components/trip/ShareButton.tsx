@@ -1,26 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuthContext } from '@/components/auth/AuthProvider';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 
 interface ShareButtonProps {
   tripId: string;
   isOwner: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showButton?: boolean;
 }
 
-export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
-  const { user } = useAuthContext();
-  const [showModal, setShowModal] = useState(false);
+export default function ShareButton({ tripId, isOwner, open, onOpenChange, showButton = true }: ShareButtonProps) {
+  const [internalShowModal, setInternalShowModal] = useState(false);
+  const showModal = open !== undefined ? open : internalShowModal;
+  const setShowModal = onOpenChange || setInternalShowModal;
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
 
-  if (!isOwner) {
-    return null; // Only owners can invite
-  }
+  useEffect(() => {
+    if (open !== undefined) {
+      setInternalShowModal(open);
+    }
+  }, [open]);
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -40,9 +45,9 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`, // Pass token as header
+        'Authorization': `Bearer ${session.access_token}`,
       },
-      credentials: 'include', // Include cookies for authentication
+      credentials: 'include',
       body: JSON.stringify({ email }),
     });
 
@@ -71,32 +76,39 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
     }
   }
 
+  // Only owners can invite - render nothing if not owner
+  if (!isOwner) {
+    return null;
+  }
+
   return (
     <>
-      <button
-        onClick={() => setShowModal(true)}
-        className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-        style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
-        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      {showButton && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+          style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
         >
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-          <polyline points="16 6 12 2 8 6" />
-          <line x1="12" y1="2" x2="12" y2="15" />
-        </svg>
-        Share Trip
-      </button>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+            <polyline points="16 6 12 2 8 6" />
+            <line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+          Share Trip
+        </button>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
@@ -175,8 +187,8 @@ export default function ShareButton({ tripId, isOwner }: ShareButtonProps) {
                 </div>
               )}
               {error && (
-                <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--destructive)', border: '1px solid var(--destructive)', opacity: 0.1 }}>
-                  <p className="text-sm" style={{ color: 'var(--destructive)' }}>{error}</p>
+                <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--accent)', border: '1px solid var(--destructive)' }}>
+                  <p className="text-sm font-medium" style={{ color: 'var(--destructive)' }}>{error}</p>
                 </div>
               )}
               <div className="flex gap-2">

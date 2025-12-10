@@ -1,9 +1,10 @@
 import { supabase } from './client';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { Place } from './schema.types';
 
 export type RealtimeEvent =
-  | { type: 'place_added'; place: any }
-  | { type: 'place_updated'; id: string; updates: any }
+  | { type: 'place_added'; place: Place }
+  | { type: 'place_updated'; id: string; updates: Partial<Place> }
   | { type: 'place_deleted'; id: string }
   | { type: 'cursor_move'; user_id: string; user_name?: string; lat: number; lng: number; color: string };
 

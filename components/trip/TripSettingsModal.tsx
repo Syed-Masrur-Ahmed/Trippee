@@ -89,9 +89,10 @@ export default function TripSettingsModal({
     setLoading(true);
     setError(null);
 
-    try {
-      const calculatedDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    // Calculate days before try block so it's available in catch
+    const calculatedDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
+    try {
       const { error: updateError } = await supabase
         .from('trips')
         .update({
@@ -107,9 +108,59 @@ export default function TripSettingsModal({
 
       onUpdate?.();
       onClose();
-    } catch (err: any) {
-      console.error('Failed to update trip settings:', err);
-      setError(err.message || 'Failed to update trip settings');
+    } catch (err: unknown) {
+      // Parse database errors and show user-friendly messages
+      let errorMessage = 'Failed to update trip settings';
+      
+      // Handle Supabase error object structure - check multiple possible locations
+      const errorObj = (err || {}) as Record<string, unknown>;
+      let errorMessageText = '';
+      
+      // Try different ways to extract the error message
+      if (typeof err === 'string') {
+        errorMessageText = err;
+      } else if (err instanceof Error) {
+        errorMessageText = err.message;
+      } else if (typeof errorObj.message === 'string') {
+        errorMessageText = errorObj.message;
+      } else if (typeof errorObj.details === 'string') {
+        errorMessageText = errorObj.details;
+      } else if (typeof errorObj.hint === 'string') {
+        errorMessageText = errorObj.hint;
+      } else if (typeof errorObj.code === 'string') {
+        // Supabase errors sometimes have codes
+        errorMessageText = `Database error (${errorObj.code})`;
+      } else {
+        // Try to stringify to see what we have
+        try {
+          const errorStr = JSON.stringify(errorObj);
+          if (errorStr && errorStr !== '{}') {
+            errorMessageText = errorStr;
+          }
+        } catch {
+          // Ignore JSON stringify errors
+        }
+      }
+      
+      if (errorMessageText) {
+        const message = errorMessageText.toLowerCase();
+        
+        if (message.includes('trip_days') || message.includes('trip_days_check')) {
+          errorMessage = `Trip duration must be between 1 and 14 days. Your trip is ${calculatedDays} days.`;
+        } else if (message.includes('dates_check') || message.includes('end_date')) {
+          errorMessage = 'End date must be after or equal to start date.';
+        } else if (message.includes('check constraint')) {
+          // Generic check constraint error - try to extract useful info
+          errorMessage = `Invalid trip settings. Please check your dates and try again. (Trip duration: ${calculatedDays} days)`;
+        } else {
+          errorMessage = errorMessageText;
+        }
+      } else {
+        // If no message, provide a generic error with calculated days
+        errorMessage = `Failed to update trip settings. Please check your dates. (Trip duration: ${calculatedDays} days)`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -182,7 +233,7 @@ export default function TripSettingsModal({
           )}
 
           {error && (
-            <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--destructive)', border: '1px solid var(--destructive)', opacity: 0.1 }}>
+            <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--accent)', border: '1px solid var(--destructive)' }}>
               <p className="text-sm" style={{ color: 'var(--destructive)' }}>{error}</p>
             </div>
           )}

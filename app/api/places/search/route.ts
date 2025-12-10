@@ -1,4 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GooglePlaceResult } from '@/lib/supabase/schema.types';
+
+interface PlacesSearchRequest {
+  textQuery: string;
+  maxResultCount: number;
+  locationBias?: {
+    circle: {
+      center: { latitude: number; longitude: number };
+      radius: number;
+    };
+  };
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -14,14 +26,11 @@ export async function GET(request: NextRequest) {
   // Check for API key
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
-    console.error('GOOGLE_PLACES_API_KEY is not set');
     return NextResponse.json({ 
       results: [],
       error: 'API key not configured. Please set GOOGLE_PLACES_API_KEY environment variable.'
     }, { status: 500 });
   }
-
-  console.log('Searching for:', query, 'with API key:', apiKey ? 'SET' : 'NOT SET');
 
   try {
     // Use the new Google Places API (New) - Text Search endpoint
@@ -29,10 +38,9 @@ export async function GET(request: NextRequest) {
     const url = 'https://places.googleapis.com/v1/places:searchText';
 
     // Build request body
-    const requestBody: any = {
+    const requestBody: PlacesSearchRequest = {
       textQuery: query,
       maxResultCount: limit,
-      // Don't restrict by type - let Google return all relevant places
     };
 
     // Add location bias if coordinates are provided
@@ -59,17 +67,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Google Places API (New) error:', response.status, errorData);
-      console.error('Request body was:', JSON.stringify(requestBody, null, 2));
       return NextResponse.json({ results: [] }, { status: response.status });
     }
 
     const data = await response.json();
-    console.log('Google Places API response:', JSON.stringify(data, null, 2));
 
     if (!data.places || data.places.length === 0) {
-      console.log('No places found in response. Full response:', JSON.stringify(data, null, 2));
       return NextResponse.json({ results: [] });
     }
 
@@ -122,7 +125,7 @@ export async function GET(request: NextRequest) {
     };
 
     // Transform Google Places API (New) response to match expected format
-    const results = data.places.slice(0, limit).map((place: any) => {
+    const results = data.places.slice(0, limit).map((place: GooglePlaceResult) => {
       // Extract category from types array and map to database category
       let category = 'other';
       if (place.types && place.types.length > 0) {
@@ -151,8 +154,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ results });
-  } catch (error) {
-    console.error('Google Places API (New) error:', error);
+  } catch {
     return NextResponse.json({ results: [] }, { status: 500 });
   }
 }

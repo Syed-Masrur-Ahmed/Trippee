@@ -3,15 +3,15 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 
 const getPlaceInfoSchema = z.object({
-  placeName: z.string().optional().describe('Name of the place to get information about. Can be a place name from the itinerary or a general place name.'),
+  placeName: z.string().optional().describe('REQUIRED when user mentions a place name. Extract the exact place name from the user\'s message. Examples: If user says "tell me about Tasty Treat Dhanmondi", use placeName="Tasty Treat Dhanmondi". If user says "what is Awakening Cafe", use placeName="Awakening Cafe". Include the full name including location if mentioned (e.g., "Tasty Treat Dhanmondi" not just "Tasty Treat").'),
   placeId: z.string().optional().describe('Google Places ID of the place (if available).'),
   tripPlaceId: z.string().optional().describe('ID of the place in the trip database (if asking about a place already in the itinerary).'),
 });
 
 const searchPlacesSchema = z.object({
   query: z.string().describe('Search query that can include location names and categories. Examples: "cafes in Shibuya", "sushi restaurants Tokyo", "museums near Ueno", "temples Kyoto". You can combine location and category in the query.'),
-  lat: z.number().optional().describe('Latitude of search center (optional, use trip center if not provided)'),
-  lng: z.number().optional().describe('Longitude of search center (optional, use trip center if not provided)'),
+    lat: z.number().optional().describe('Latitude of search center (optional, use trip center if not provided)'),
+    lng: z.number().optional().describe('Longitude of search center (optional, use trip center if not provided)'),
   limit: z.number().default(1).describe('Number of results to return. IMPORTANT: Extract the number from the user\'s request. If user says "find me a cafe" or "find me one cafe", use limit=1. If user says "find me 5 cafes", use limit=5. If user says "find me cafes" (no number), use limit=3 as a reasonable default. Always match the user\'s intent for quantity.'),
 });
 
@@ -47,12 +47,12 @@ export function createSearchPlacesTool(tripId: string) {
             .select('name, lat, lng, place_id')
             .eq('trip_id', tripId);
           
-          if (existingPlaces?.length > 0) {
+          if (existingPlaces && Array.isArray(existingPlaces) && existingPlaces.length > 0) {
             nonDuplicateResults = allResults.filter((place: any) => {
               if (!place?.name) return true;
               
               const placeName = place.name.toLowerCase().trim();
-              return !existingPlaces.some((existing) => {
+              return !existingPlaces.some((existing: any) => {
                 if (place.id && existing.place_id && place.id === existing.place_id) return true;
                 const existingName = (existing.name || '').toLowerCase().trim();
                 if (existingName === placeName) {
@@ -63,8 +63,8 @@ export function createSearchPlacesTool(tripId: string) {
               });
             });
           }
-        } catch (error) {
-          console.error('[Tool] Error filtering duplicates:', error);
+        } catch {
+          // Continue without duplicate filtering
         }
       }
       
@@ -83,17 +83,23 @@ export function createSearchPlacesTool(tripId: string) {
 
 export function createGetPlaceInfoTool(tripId: string) {
   return tool({
-    description: 'Get detailed information about a specific place. Use this when users ask about a place that is already in their itinerary, or when they want to know more about a specific place (e.g., "Tell me about Awakening Cafe", "What is Fuglen Tokyo?", "Give me info about the first place on Day 1"). You can search by place name or use the place ID if available.',
+    description: 'Get detailed information about a specific place. Use this when users ask about a place by name, such as "Tell me about [place name]", "Tell me more about [place name]", "What is [place name]?", or "Give me info about [place name]". This tool works for places both in and outside the itinerary. Examples: "Tell me about Awakening Cafe", "Tell me more about Tasty Treat Dhanmondi", "What is Fuglen Tokyo?", "Give me info about the first place on Day 1". IMPORTANT: When calling this tool, you MUST extract the exact place name from the user\'s message and pass it as the placeName parameter. For example, if the user says "tell me more about Tasty Treat Dhanmondi", you must call this tool with placeName="Tasty Treat Dhanmondi" (include the full name including location if mentioned). Do NOT use search_places for this - use get_place_info instead.',
     parameters: getPlaceInfoSchema,
     execute: async (params: z.output<typeof getPlaceInfoSchema>) => {
       const { placeName, placeId, tripPlaceId } = params;
       
-      // First, try to find the place in the trip's places
-      let tripPlace = null;
+      // Validate that we have at least one identifier
+      if (!placeName && !placeId && !tripPlaceId) {
+        return {
+          error: 'Please provide a place name, place ID, or trip place ID to get information about a place.',
+        };
+      }
+      
+      let tripPlace: any = null;
       let googlePlaceId = placeId;
       
+      // If tripPlaceId is provided, get from database first
       if (tripPlaceId) {
-        // Get place from trip database
         try {
           const supabase = await createClient();
           const { data, error } = await supabase
@@ -105,45 +111,46 @@ export function createGetPlaceInfoTool(tripId: string) {
           
           if (!error && data) {
             tripPlace = data;
-            googlePlaceId = data.place_id || googlePlaceId;
+            googlePlaceId = (data as any)?.place_id || googlePlaceId;
           }
-        } catch (error) {
-          console.error('[Tool] Error fetching trip place:', error);
-        }
-      } else if (placeName) {
-        // Search for place in trip by name
-        try {
-          const supabase = await createClient();
-          const { data } = await supabase
-            .from('places')
-            .select('*')
-            .eq('trip_id', tripId)
-            .ilike('name', `%${placeName}%`)
-            .limit(1)
-            .single();
-          
-          if (data) {
-            tripPlace = data;
-            googlePlaceId = data.place_id || googlePlaceId;
-          }
-        } catch (error) {
-          console.error('[Tool] Error searching trip places:', error);
+        } catch {
+          // Continue without trip place data
         }
       }
       
-      // If we don't have a Google Place ID yet but have a place name, search for it
+      // If we have a place name but no Google Place ID yet, search Google Places first
+      // This matches the search bar behavior - use the first result from Google Places
       if (!googlePlaceId && placeName) {
         try {
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
           const searchResponse = await fetch(`${baseUrl}/api/places/search?q=${encodeURIComponent(placeName)}&limit=1`);
           if (searchResponse.ok) {
             const searchData = await searchResponse.json();
-            if (searchData.results?.[0]?.id) {
+            if (searchData.results && Array.isArray(searchData.results) && searchData.results.length > 0) {
               googlePlaceId = searchData.results[0].id;
             }
           }
-        } catch (error) {
-          console.error('[Tool] Error searching for place:', error);
+        } catch {
+          // Continue without search results
+        }
+      }
+      
+      // Now check if this place is in the trip database (to get trip-specific info)
+      if (googlePlaceId && !tripPlace) {
+        try {
+          const supabase = await createClient();
+          const { data } = await supabase
+            .from('places')
+            .select('*')
+            .eq('trip_id', tripId)
+            .eq('place_id', googlePlaceId)
+            .maybeSingle();
+          
+          if (data) {
+            tripPlace = data;
+          }
+        } catch {
+          // Continue without trip place check
         }
       }
       
@@ -156,15 +163,16 @@ export function createGetPlaceInfoTool(tripId: string) {
           if (response.ok) {
             googlePlaceDetails = await response.json();
           }
-        } catch (error) {
-          console.error('[Tool] Error fetching Google Place details:', error);
+        } catch {
+          // Continue without Google Place details
         }
       }
       
       // If we still don't have any information, return an error
       if (!tripPlace && !googlePlaceDetails) {
+        const placeNameForError = placeName || 'this place';
         return {
-          error: `I couldn't find information about "${placeName}". The place might not exist in your itinerary or in Google Places. Try searching for it first using the search_places tool, or check the spelling.`,
+          error: `I couldn't find information about "${placeNameForError}". The place might not exist in Google Places. Try checking the spelling or searching for it using the search bar.`,
         };
       }
       

@@ -15,6 +15,9 @@ import { useRouter } from 'next/navigation';
 import ShareButton from '@/components/trip/ShareButton';
 import GroupChat from '@/components/ai/GroupChat';
 import TripSettingsModal from '@/components/trip/TripSettingsModal';
+import TripMembersModal from '@/components/trip/TripMembersModal';
+import { FloatingDock } from '@/components/ui/floating-dock';
+import { IconDownload, IconSettings, IconMessageCircle, IconShare, IconUsers, IconNotes } from '@tabler/icons-react';
 
 interface Place {
   id: string;
@@ -23,6 +26,7 @@ interface Place {
   lng: number;
   day_assigned: number | null;
   order_index: number | null;
+  place_id?: string | null;
 }
 
 interface Cursor {
@@ -46,9 +50,11 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [trip, setTrip] = useState<{ start_date?: string | null; end_date?: string | null; trip_days?: number | null } | null>(null);
+  const [trip, setTrip] = useState<{ name?: string; start_date?: string | null; end_date?: string | null; trip_days?: number | null } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [resetExistingItinerary, setResetExistingItinerary] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -60,15 +66,9 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     if (user) {
       loadData();
       
-      const myUserId = user.id;
-      const myColor = getUserColor(user.id);
-      console.log('My user ID:', myUserId);
-      console.log('My color:', myColor);
-      
       // Setup realtime subscription
       const realtimeChannel = subscribeToTrip(tripId, handleRealtimeEvent);
       setChannel(realtimeChannel);
-      console.log('Subscribed to trip:', tripId);
 
       // Subscribe to places table changes (for AI-created places)
       const placesChannel = supabase
@@ -82,10 +82,8 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
             filter: `trip_id=eq.${tripId}`,
           },
           (payload) => {
-            console.log('New place inserted:', payload.new);
             const newPlace = payload.new as Place;
             setPlaces((prev) => {
-              // Check if place already exists (avoid duplicates)
               if (prev.some((p) => p.id === newPlace.id)) {
                 return prev;
               }
@@ -102,7 +100,6 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
             filter: `trip_id=eq.${tripId}`,
           },
           (payload) => {
-            console.log('Place updated:', payload.new);
             const updatedPlace = payload.new as Place;
             setPlaces((prev) =>
               prev.map((p) => (p.id === updatedPlace.id ? updatedPlace : p))
@@ -118,7 +115,6 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
             filter: `trip_id=eq.${tripId}`,
           },
           (payload) => {
-            console.log('Place deleted:', payload.old);
             setPlaces((prev) => prev.filter((p) => p.id !== payload.old.id));
           }
         )
@@ -126,14 +122,13 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
       // Broadcast initial cursor position after channel is ready
       setTimeout(() => {
-        console.log('Broadcasting initial cursor position');
         broadcastEvent(realtimeChannel, {
           type: 'cursor_move',
-          user_id: myUserId,
+          user_id: user.id,
           user_name: user.user_metadata?.full_name || user.email || 'User',
           lat: 35.6762,
           lng: 139.6503,
-          color: myColor,
+          color: 'var(--primary)',
         });
       }, 1000);
 
@@ -149,19 +144,20 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     const { data } = await getPlaces(tripId);
     setPlaces(data || []);
     
-    // Load trip data to check ownership and get trip settings
-    if (user) {
-      const { data: tripData } = await getTrip(tripId);
-      const trip = tripData as { 
-        created_by?: string; 
-        start_date?: string | null; 
-        end_date?: string | null; 
-        trip_days?: number | null;
-      } | null;
-      
-      setIsOwner(trip?.created_by === user.id);
-      setTrip(trip || null);
-    }
+      // Load trip data to check ownership and get trip settings
+      if (user) {
+        const { data: tripData } = await getTrip(tripId);
+        const trip = tripData as { 
+          name?: string;
+          created_by?: string; 
+          start_date?: string | null; 
+          end_date?: string | null; 
+          trip_days?: number | null;
+        } | null;
+        
+        setIsOwner(trip?.created_by === user.id);
+        setTrip(trip || null);
+      }
     
     setLoading(false);
   }
@@ -192,12 +188,10 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         break;
 
       case 'cursor_move':
-        // Another user moved their cursor
         // Don't show our own cursor
         if (user && event.user_id === user.id) {
           break;
         }
-        console.log('Received cursor from:', event.user_id.slice(0, 8), 'at', event.lat, event.lng);
         setCursors((prev) => {
           const newCursors = new Map(prev);
           newCursors.set(event.user_id, {
@@ -207,41 +201,22 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
             color: event.color,
             user_name: event.user_name,
           });
-          console.log('Total cursors:', newCursors.size);
           return newCursors;
         });
         break;
     }
   }
 
-  function getUserColor(userId: string) {
-    // Generate consistent color based on user ID
-    const colors = [
-      '#ef4444', // red
-      '#f59e0b', // orange
-      '#10b981', // green
-      '#3b82f6', // blue
-      '#8b5cf6', // purple
-      '#ec4899', // pink
-      '#06b6d4', // cyan
-    ];
-    // Use first character of user ID to pick color consistently
-    const index = parseInt(userId[0], 16) % colors.length;
-    return colors[index];
-  }
-
   function handleMapMove(lat: number, lng: number) {
     if (!channel || !user) return;
 
-    console.log('Broadcasting cursor at:', lat, lng);
-    // Broadcast cursor position (throttled by the caller)
     broadcastEvent(channel, {
       type: 'cursor_move',
       user_id: user.id,
       user_name: user.user_metadata?.full_name || user.email || 'User',
       lat,
       lng,
-      color: getUserColor(user.id),
+      color: 'var(--primary)',
     });
   }
 
@@ -260,7 +235,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       created_by: user.id,
     };
 
-    const { data, error } = await createPlace(newPlace);
+    const { data } = await createPlace(newPlace);
     if (data) {
       setPlaces((prevPlaces) => [...prevPlaces, data]);
       
@@ -271,8 +246,6 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           place: data,
         });
       }
-    } else {
-      console.error('Failed to create place:', error);
     }
   }
 
@@ -292,7 +265,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       created_by: user.id,
     };
 
-    const { data, error } = await createPlace(newPlace);
+    const { data } = await createPlace(newPlace);
     if (data) {
       setPlaces((prevPlaces) => [...prevPlaces, data]);
       
@@ -303,8 +276,6 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           place: data,
         });
       }
-    } else {
-      console.error('Failed to create place from search:', error);
     }
   }
 
@@ -314,7 +285,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   }
 
   async function handleSavePlace(id: string, name: string) {
-    const { data, error } = await updatePlace(id, { name });
+    const { data } = await updatePlace(id, { name });
     if (data) {
       setPlaces((prevPlaces) => prevPlaces.map((p) => (p.id === id ? { ...p, name } : p)));
       
@@ -326,15 +297,12 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           updates: { name },
         });
       }
-    } else {
-      console.error('Failed to update place:', error);
     }
   }
 
   async function handleDeletePlace(id: string) {
     const { error } = await deletePlace(id);
     if (!error) {
-      // Use functional update to avoid stale state
       setPlaces((prevPlaces) => prevPlaces.filter((p) => p.id !== id));
       
       // Broadcast to other users
@@ -344,8 +312,6 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           id,
         });
       }
-    } else {
-      console.error('Failed to delete place:', error);
     }
   }
 
@@ -366,8 +332,6 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     });
 
     if (error) {
-      // Revert on error
-      console.error('Failed to move place:', error);
       setPlaces(previousPlaces);
     } else {
       // Broadcast to other users
@@ -423,9 +387,9 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    } catch (error: any) {
-      console.error('Failed to download itinerary:', error);
-      alert(error.message || 'Failed to download itinerary. Please try again.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to download itinerary. Please try again.';
+      alert(message);
     }
   }
 
@@ -465,8 +429,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           
           // Update placesToUse to reflect the reset (all places are now unassigned)
           placesToUse = places.map(p => ({ ...p, day_assigned: null, order_index: null }));
-        } catch (error) {
-          console.error('Failed to reset itinerary:', error);
+        } catch {
           setIsGenerating(false);
           alert('Failed to reset itinerary. Please try again.');
           return;
@@ -606,8 +569,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
       // Reload data to reflect changes
       await loadData();
-    } catch (error) {
-      console.error('Failed to generate itinerary:', error);
+    } catch {
       alert('Failed to generate itinerary. Please try again.');
     } finally {
       setIsGenerating(false);
@@ -632,88 +594,66 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
   const unassignedCount = places.filter((p) => p.day_assigned === null).length;
 
+  // Create dock items
+  const dockItems = [
+    {
+      title: 'Download Itinerary',
+      icon: <IconDownload className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      onClick: handleDownloadItinerary,
+    },
+    {
+      title: 'Notes',
+      icon: <IconNotes className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      onClick: () => router.push(`/trip/${tripId}/notes`),
+    },
+    {
+      title: 'Trip Members',
+      icon: <IconUsers className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      onClick: () => setShowMembersModal(true),
+    },
+    ...(isOwner
+      ? [
+          {
+            title: 'Settings',
+            icon: <IconSettings className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+            onClick: () => setIsSettingsOpen(true),
+          },
+        ]
+      : []),
+    {
+      title: isChatOpen ? 'Close Chat' : 'Open Chat',
+      icon: <IconMessageCircle className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      onClick: () => setIsChatOpen(!isChatOpen),
+    },
+    ...(isOwner
+      ? [
+          {
+            title: 'Share Trip',
+            icon: <IconShare className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+            onClick: () => setShowShareModal(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
-      <div className="fixed top-20 right-4 z-30 flex gap-2">
-        <button
-          onClick={handleDownloadItinerary}
-          className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-          style={{ backgroundColor: 'var(--secondary)', color: 'var(--secondary-foreground)' }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-          title="Download Itinerary"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          Download
-        </button>
-        {isOwner && (
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-            style={{ backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--muted)'}
-            title="Trip Settings"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-            Settings
-          </button>
-        )}
-        <button
-          onClick={() => setIsChatOpen(!isChatOpen)}
-          className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-          style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          {isChatOpen ? 'Close Chat' : 'Open Chat'}
-        </button>
-        <ShareButton tripId={tripId} isOwner={isOwner} />
-      </div>
+      <FloatingDock items={dockItems} />
       <GroupChat tripId={tripId} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <TripMembersModal 
+        tripId={tripId} 
+        isOpen={showMembersModal} 
+        onClose={() => setShowMembersModal(false)} 
+      />
+      {isOwner && (
+        <ShareButton 
+          tripId={tripId} 
+          isOwner={isOwner} 
+          open={showShareModal}
+          onOpenChange={setShowShareModal}
+          showButton={false}
+        />
+      )}
       <MapView 
         places={places} 
         onMapClick={handleMapClick}

@@ -46,8 +46,8 @@ export default function AuthModal({ onClose }: AuthModalProps) {
         if (error) throw error;
         onClose();
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }

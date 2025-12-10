@@ -2,7 +2,6 @@ import { google } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
-import { ITINERARY_SYSTEM_PROMPT, buildItineraryPrompt, validateItinerary } from '@/lib/ai/prompts';
 import { clusterPlaces, optimizeRoute, calculateRouteDistance, estimateTravelTime } from '@/lib/utils/geo';
 
 // Zod schema for AI output (only themes and reasoning)
@@ -37,10 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'tripDays must be between 1 and 14' }, { status: 400 });
     }
 
-    console.log(`Generating itinerary for ${places.length} places across ${tripDays} days`);
-
     // Step 1: Deterministic clustering using k-means
-    console.log('Clustering places deterministically...');
     // Convert to format expected by clusterPlaces (id, name, lat, lng)
     const placesForClustering = places.map((p) => ({
       id: p.id,
@@ -57,20 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log cluster sizes for debugging
-    console.log(
-      `Clusters created: ${clusters.map((c, i) => `Day ${i + 1}: ${c.length} places`).join(', ')}`
-    );
-
-    // Ensure we have the right number of clusters
-    if (clusters.length !== tripDays) {
-      console.warn(
-        `Expected ${tripDays} clusters but got ${clusters.length}. This may indicate places are too spread out.`
-      );
-    }
-
     // Step 2: Optimize routes within each cluster
-    console.log('Optimizing routes within clusters...');
     const optimizedClusters = clusters.map((cluster) => optimizeRoute(cluster));
 
     // Step 3: Build structured itinerary with deterministic data
@@ -108,7 +91,6 @@ export async function POST(request: NextRequest) {
     });
 
     // Step 4: Send to AI only for themes and reasoning
-    console.log('Generating themes with AI...');
     const themePrompt = `Given these pre-organized travel days, suggest a theme name for each day and explain the reasoning:
 
 ${structuredItinerary
@@ -150,16 +132,13 @@ Return JSON with themes array and overall reasoning.`;
       itinerary: finalItinerary,
       reasoning: themeData.reasoning,
     });
-  } catch (error: any) {
-    console.error('Error generating itinerary:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorStatus = (error as { status?: number })?.status;
 
     // Handle rate limiting
-    if (error.message?.includes('429') || error.status === 429 || error.message?.includes('quota')) {
+    if (errorMessage.includes('429') || errorStatus === 429 || errorMessage.includes('quota')) {
       return NextResponse.json(
         { error: 'AI service is rate limited. Please try again in 60 seconds.' },
         { status: 429 }
@@ -167,7 +146,7 @@ Return JSON with themes array and overall reasoning.`;
     }
 
     // Handle API key errors
-    if (error.message?.includes('API key') || error.message?.includes('authentication')) {
+    if (errorMessage.includes('API key') || errorMessage.includes('authentication')) {
       return NextResponse.json(
         { error: 'Invalid API key. Please check GOOGLE_GENERATIVE_AI_API_KEY in .env.local' },
         { status: 500 }
@@ -177,8 +156,8 @@ Return JSON with themes array and overall reasoning.`;
     // Handle other errors with more detail
     return NextResponse.json(
       {
-        error: error.message || 'Failed to generate itinerary',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        error: errorMessage || 'Failed to generate itinerary',
+        details: process.env.NODE_ENV === 'development' ? errorStack : undefined,
       },
       { status: 500 }
     );

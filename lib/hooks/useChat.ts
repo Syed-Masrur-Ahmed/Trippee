@@ -45,8 +45,6 @@ export function useChat({ api, onFinish }: UseChatOptions): UseChatHelpers {
         throw new Error('Not authenticated');
       }
 
-      console.log("Sending request to AI...");
-      
       const response = await fetch(api, {
         method: 'POST',
         headers: { 
@@ -64,44 +62,25 @@ export function useChat({ api, onFinish }: UseChatOptions): UseChatHelpers {
         } catch {
           errorMsg = await response.text();
         }
-        
-        console.error("AI Error Details:", errorMsg);
         alert(`AI Error: ${errorMsg}`); 
         throw new Error(errorMsg);
       }
 
       const data = await response.json();
-      console.log("AI Response received:", {
-        hasContent: !!data.content,
-        contentLength: data.content?.length || 0,
-        hasToolInvocations: !!data.toolInvocations,
-        toolInvocationsCount: data.toolInvocations?.length || 0,
-        fullData: data,
-      });
 
       if (data.content) {
         setMessages([...newMessages, { role: 'assistant', content: data.content }]);
-      } else if (data.toolInvocations && data.toolInvocations.length > 0) {
-        console.log("AI used tools but generated no text. Tool invocations:", data.toolInvocations);
       }
 
       if (onFinish) {
-        console.log("Calling onFinish with:", {
-          content: data.content || '',
-          toolInvocations: data.toolInvocations,
-        });
         await onFinish({
           content: data.content || '',
           toolInvocations: data.toolInvocations,
         });
-        console.log("onFinish completed");
-      } else {
-        console.warn("onFinish callback not provided!");
       }
 
     } catch (error) {
-      console.error('Chat execution failed:', error);
-      // Optional: setMessages(messages) to revert if needed
+      // Silent fail - error already shown to user via alert
     } finally {
       setIsLoading(false);
     }

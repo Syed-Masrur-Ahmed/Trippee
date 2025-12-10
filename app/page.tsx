@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import AuthModal from '@/components/auth/AuthModal';
 import Squares from '@/components/ui/Squares';
+import Link from 'next/link';
 
 export default function Home() {
   const router = useRouter();
@@ -58,7 +59,21 @@ export default function Home() {
             </button>
           </div>
         </div>
-      </div>
+        <div className="absolute bottom-4 right-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          Made by{' '}
+          <Link
+            href="https://github.com/Syed-Masrur-Ahmed"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors underline"
+            style={{ color: 'var(--primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+          >
+            Syed Masrur Ahmed
+          </Link>
+        </div>
+    </div>
       {showAuthModal && (
         <AuthModal onClose={() => setShowAuthModal(false)} />
       )}

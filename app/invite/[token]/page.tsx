@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthContext } from '@/components/auth/AuthProvider';
@@ -29,44 +29,47 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
   const [error, setError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
 
-  useEffect(() => {
-    params.then((p) => setToken(p.token));
-  }, [params]);
-
-  useEffect(() => {
-    if (token) {
-      loadInvitation();
-    }
-  }, [token]);
-
-  async function loadInvitation() {
+  const loadInvitation = useCallback(async () => {
     if (!token) return;
 
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('trip_invitations')
       .select('*, trips(id, name)')
       .eq('token', token)
       .eq('status', 'pending')
       .single();
 
-    if (error || !data) {
+    if (fetchError || !data) {
       setError('Invalid or expired invitation');
       setLoading(false);
       return;
     }
 
     // Check if invitation has expired
-    const invitationData = data as any;
+    const invitationData = data as Invitation;
     if (invitationData.expires_at && new Date(invitationData.expires_at) < new Date()) {
       setError('This invitation has expired');
       setLoading(false);
       return;
     }
 
-    setInvitation(data as Invitation);
+    setInvitation(invitationData);
     setLoading(false);
-  }
+  }, [token]);
+
+  useEffect(() => {
+    params.then((p) => setToken(p.token));
+  }, [params]);
+
+  useEffect(() => {
+    if (token) {
+      loadInvitation().catch(() => {
+        // Silently handle any errors
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   async function handleAccept() {
     if (!user || !invitation) {
@@ -98,8 +101,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
         trip_id: invitation.trip_id,
         user_id: user.id,
         role: 'member',
-        invited_by: invitation.invited_by,
-      } as any);
+      });
 
     if (memberError) {
       setError(memberError.message);
@@ -110,7 +112,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     // Update invitation status
     await supabase
       .from('trip_invitations')
-      .update({ status: 'accepted' } as any)
+      .update({ status: 'accepted' })
       .eq('id', invitation.id);
 
     // Redirect to trip
@@ -158,7 +160,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
       <div className="rounded-lg p-8 max-w-md w-full" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-lg)' }}>
         <h1 className="text-2xl font-bold mb-4" style={{ color: 'var(--foreground)' }}>Trip Invitation</h1>
         <p className="mb-2" style={{ color: 'var(--muted-foreground)' }}>
-          You've been invited to collaborate on:
+          You&apos;ve been invited to collaborate on:
         </p>
         <p className="text-xl font-semibold mb-6" style={{ color: 'var(--primary)' }}>
           {invitation.trips?.name || 'Unknown Trip'}

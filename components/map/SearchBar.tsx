@@ -70,8 +70,7 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
       setResults(results.slice(0, 5)); // Show max 5 in dropdown
       setIsOpen(true);
       setLoading(false);
-    } catch (error) {
-      console.error('Search failed:', error);
+    } catch {
       setLoading(false);
       setResults([]);
     }

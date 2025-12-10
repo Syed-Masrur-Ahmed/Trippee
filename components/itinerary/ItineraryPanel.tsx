@@ -17,6 +17,7 @@ interface Place {
   lng: number;
   day_assigned: number | null;
   order_index: number | null;
+  place_id?: string | null;
 }
 
 interface ItineraryPanelProps {
@@ -38,6 +39,7 @@ function DraggablePlace({
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: place.id,
     data: { place },
+    disabled: false,
   });
 
   const style = transform
@@ -55,12 +57,15 @@ function DraggablePlace({
   return (
     <div
       ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       style={{
         ...style,
         backgroundColor: place.day_assigned ? 'var(--accent)' : 'var(--muted)',
         borderRadius: 'var(--radius-lg)',
         padding: '0.75rem',
         transition: 'background-color 0.2s',
+        cursor: 'move',
       }}
       className="relative"
       onMouseEnter={(e) => {
@@ -71,11 +76,7 @@ function DraggablePlace({
       }}
     >
       <div className="flex items-start gap-2">
-        <div
-          {...listeners}
-          {...attributes}
-          className="flex-1 flex items-start gap-2 cursor-move"
-        >
+        <div className="flex-1 flex items-start gap-2">
           {index !== undefined && (
             <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
               {index + 1}
@@ -86,10 +87,42 @@ function DraggablePlace({
             <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
               {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
             </div>
+            <a
+              href={place.place_id 
+                ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
+                : `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              className="text-xs transition-colors underline whitespace-nowrap inline-block mt-1.5"
+              style={{ color: 'var(--primary)' }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            >
+              Open on Google Maps
+            </a>
           </div>
         </div>
         <button
           onClick={handleMenuClick}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           className="p-1 rounded transition-colors flex-shrink-0"
           style={{ color: 'var(--muted-foreground)' }}
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}

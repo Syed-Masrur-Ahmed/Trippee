@@ -1,6 +1,6 @@
 # Authentication Setup Instructions
 
-## ✅ What's Been Implemented
+## What's Been Implemented
 
 All authentication code has been added to the codebase:
 
@@ -14,7 +14,7 @@ All authentication code has been added to the codebase:
 8. **Updated TripPage** - Now uses real user IDs instead of localStorage
 9. **Updated Landing Page** - Requires auth to create trips
 
-## 🔧 What You Need to Do
+## What You Need to Do
 
 ### Step 1: Run Database Migration
 
@@ -61,7 +61,7 @@ SET created_by = 'user-id-here'
 WHERE created_by IS NULL;
 ```
 
-## 🎯 What Changed
+## What Changed
 
 ### Before (Phase 7):
 - Used `localStorage` for user IDs
@@ -75,7 +75,7 @@ WHERE created_by IS NULL;
 - Proper user identification in real-time collaboration
 - Protected routes (must be signed in to view trips)
 
-## 📝 Next Steps
+## Next Steps
 
 After authentication is working, you can implement:
 - **Phase 8.5**: Trip Sharing & Invitations
@@ -83,7 +83,7 @@ After authentication is working, you can implement:
 
 These phases are already documented in `IMPLEMENTATION_PLAN.md`.
 
-## ⚠️ Important Notes
+## Important Notes
 
 1. **RLS Policies**: All tables now have Row Level Security enabled. Users can only see trips they own or are members of.
 
@@ -95,7 +95,7 @@ These phases are already documented in `IMPLEMENTATION_PLAN.md`.
 
 4. **Profile Creation**: Profiles are automatically created when a user signs up via the trigger function.
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 **"Users can view trips they're members of" policy error:**
 - Make sure you've run the migration SQL

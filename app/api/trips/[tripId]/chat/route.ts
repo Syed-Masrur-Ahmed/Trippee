@@ -5,6 +5,16 @@ import { createClient as createClientJS } from '@supabase/supabase-js'; // For H
 import { NextRequest, NextResponse } from 'next/server';
 import { createSearchPlacesTool, createGetPlaceInfoTool } from '@/lib/ai/tools';
 
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface ToolInvocation {
+  toolName: string;
+  result?: { results?: unknown[]; placesAdded?: number; allResults?: unknown[] };
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tripId: string }> }
@@ -13,33 +23,22 @@ export async function POST(
     const { tripId } = await params;
     
     // --- 1. AUTHENTICATION FIX ---
-    let supabase;
-    let user;
-
     // Check for Authorization Header (Bearer Token)
     const authHeader = request.headers.get('Authorization');
     
-    if (authHeader) {
-      // CASE A: Client sent a Token (useChat hook often does this)
-      // We must use the 'supabase-js' client which supports manual headers
-      supabase = createClientJS(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          global: { headers: { Authorization: authHeader } },
-        }
-      );
-    } else {
-      // CASE B: Client sent Cookies (Browser session)
-      supabase = await createClient();
-    }
+    const supabase = authHeader
+      ? createClientJS(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          { global: { headers: { Authorization: authHeader } } }
+        )
+      : await createClient();
 
     // Verify User
     const { data: authData } = await supabase.auth.getUser();
-    user = authData.user;
+    const user = authData.user;
 
     if (!user) {
-      console.error("Auth failed: No user found in Token or Cookies");
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     // -----------------------------
@@ -59,7 +58,7 @@ export async function POST(
 
     // Extract the latest user message
     const latestUserMessage = requestMessages
-      ?.filter((m: any) => m.role === 'user' && m.content && m.content.trim())
+      ?.filter((m: ChatMessage) => m.role === 'user' && m.content && m.content.trim())
       .pop();
 
     if (latestUserMessage && latestUserMessage.content?.trim()) {
@@ -74,7 +73,6 @@ export async function POST(
         } as any);
 
       if (msgError) {
-        console.error('Failed to save user message:', msgError);
         return NextResponse.json({ error: 'Failed to save message' }, { status: 500 });
       }
     }
@@ -97,7 +95,7 @@ export async function POST(
       .eq('trip_id', tripId);
 
     // Convert messages to AI SDK format, removing "Hey Trippee" prefix from latest message
-    const messages = (requestMessages || []).map((msg: any, index: number) => {
+    const messages = (requestMessages || []).map((msg: ChatMessage, index: number) => {
       // Replace the last user message with the cleaned version (without "Hey Trippee")
       if (index === requestMessages.length - 1 && msg.role === 'user') {
         return {
@@ -135,17 +133,20 @@ IMPORTANT: After using the search_places tool, you MUST provide a text response 
    
    **CRITICAL - Response Format**: When you use the search_places tool:
    - The tool returns a success message with placesAdded count - you do NOT see place names
-   - Your response MUST be friendly and brief: "Great! I've added [X] place(s) to your itinerary. Check the itinerary panel on the right to see [it/them]! 🗺️"
+   - Your response MUST be friendly and brief: "Great! I've added [X] place(s) to your itinerary. Check the itinerary panel on the right to see [it/them]!"
    - Replace [X] with the number from the tool's placesAdded field
    - Use "it" for 1 place, "them" for multiple places
    - NEVER mention place names - you don't have access to them
    - NEVER say "I found X places" or "Here are some options"
    
-2. **When users ask about specific places**: Use the get_place_info tool to provide detailed information:
-   - If they ask "Tell me about [place name]", "What is [place name]?", "Give me info about [place name]"
+2. **When users ask about specific places**: Use the get_place_info tool (NOT search_places) to provide detailed information:
+   - If they ask "Tell me about [place name]", "Tell me more about [place name]", "What is [place name]?", "Give me info about [place name]"
    - If they ask about a place that's already in their itinerary (e.g., "Tell me about the first place on Day 1")
+   - If they mention a specific place name (even if not in itinerary), use get_place_info to look it up
+   - **CRITICAL**: When calling get_place_info, you MUST extract the place name from the user's message and pass it as the placeName parameter. For example, if user says "tell me more about Tasty Treat Dhanmondi", you must call get_place_info with placeName="Tasty Treat Dhanmondi" (include the full name including location if mentioned).
    - The tool will return detailed information including address, rating, reviews, opening hours, photos, etc.
    - Share this information in a helpful, conversational way
+   - IMPORTANT: "Tell me about X" or "Tell me more about X" means use get_place_info, NOT search_places
    
 3. **When users ask for planning advice**: Provide helpful guidance on:
    - Itinerary structure and day-by-day planning
@@ -176,20 +177,31 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
     // If the result finished with tool calls but no text, generate a simple response
     const lastStep = result.steps[result.steps.length - 1];
     if (lastStep && (lastStep as any).finishReason === 'tool-calls' && !result.text) {
-      console.log('AI finished with tool calls but no text, generating fallback response...');
       
-      // Check tool results for placesAdded (new format) or results (old format)
+      // Check tool results for placesAdded (search_places) or errors (get_place_info)
       let placesAdded = 0;
+      let placeInfoError = null;
+      let placeInfoResult = null;
+      
       if (result.steps) {
         for (const step of result.steps) {
           if ((step as any).content) {
             for (const item of (step as any).content) {
               if (item.type === 'tool-result') {
                 const output = item.output?.value || item.output;
+                
+                // Check for search_places results
                 if (output?.placesAdded) {
                   placesAdded = output.placesAdded;
                 } else if (output?.results && Array.isArray(output.results)) {
                   placesAdded = output.results.length;
+                }
+                
+                // Check for get_place_info results or errors
+                if (output?.error) {
+                  placeInfoError = output.error;
+                } else if (output?.name || output?.address) {
+                  placeInfoResult = output;
                 }
               }
             }
@@ -201,7 +213,23 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
       if (placesAdded > 0) {
         result = {
           ...result,
-          text: `Great! I've added ${placesAdded} place${placesAdded > 1 ? 's' : ''} to your itinerary. Check the itinerary panel on the right to see ${placesAdded > 1 ? 'them' : 'it'}! 🗺️`,
+          text: `Great! I've added ${placesAdded} place${placesAdded > 1 ? 's' : ''} to your itinerary. Check the itinerary panel on the right to see ${placesAdded > 1 ? 'them' : 'it'}!`,
+        } as typeof result;
+      } else if (placeInfoError) {
+        result = {
+          ...result,
+          text: placeInfoError,
+        } as typeof result;
+      } else if (placeInfoResult) {
+        // Format place info result
+        const { name, address, rating, category } = placeInfoResult;
+        let infoText = `Here's what I found about ${name || 'this place'}`;
+        if (address) infoText += `:\nAddress: ${address}`;
+        if (rating) infoText += `\nRating: ${rating}/5`;
+        if (category) infoText += `\nCategory: ${category}`;
+        result = {
+          ...result,
+          text: infoText,
         } as typeof result;
       } else {
         result = {
@@ -212,7 +240,7 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
     }
 
     // Extract tool invocations from result steps
-    const toolInvocations: Array<{ toolName: string; result?: any }> = [];
+    const toolInvocations: ToolInvocation[] = [];
     
     if (result.steps) {
       for (const step of result.steps) {
@@ -261,10 +289,10 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
       content: result.text || '',
       toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
     });
-  } catch (error: any) {
-    console.error('Chat API error:', error);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: message },
       { status: 500 }
     );
   }

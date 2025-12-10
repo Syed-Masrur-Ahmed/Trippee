@@ -181,15 +181,15 @@ export default function MapView({ places, onMapClick, onMarkerClick, cursors = [
               <div
                 className="w-4 h-4 rounded-full border-2 shadow-lg"
                 style={{ 
-                  backgroundColor: cursor.color,
+                  backgroundColor: 'var(--primary)',
                   borderColor: 'var(--background)'
                 }}
               />
               <div
                 className="absolute top-5 left-0 text-xs font-semibold px-2 py-1 rounded shadow-lg whitespace-nowrap"
                 style={{ 
-                  backgroundColor: cursor.color, 
-                  color: 'var(--background)',
+                  backgroundColor: 'var(--primary)', 
+                  color: 'var(--primary-foreground)',
                   boxShadow: 'var(--shadow-md)'
                 }}
               >
@@ -200,7 +200,7 @@ export default function MapView({ places, onMapClick, onMarkerClick, cursors = [
         ))}
       </Map>
 
-      <div className="absolute top-4 left-4 z-50">
+      <div className="absolute top-20 left-4 z-[60]">
         <SearchBar onSelectResult={handleSearchResult} />
       </div>
     </div>

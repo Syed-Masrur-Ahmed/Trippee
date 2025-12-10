@@ -6,17 +6,25 @@ import { supabase } from '@/lib/supabase/client';
 import { useChat } from '@/lib/hooks/useChat';
 import { createPlace } from '@/lib/supabase/client';
 
+interface MessageProfile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+}
+
 interface Message {
   id: string;
   user_id: string | null;
   content: string;
   role: 'user' | 'assistant' | 'system';
   created_at: string;
-  profiles?: {
-    id: string;
-    full_name: string;
-    email: string;
-  };
+  profiles?: MessageProfile;
+}
+
+interface ToolResult {
+  results?: Array<{ id?: string; name: string; lat: number; lng: number; category?: string }>;
+  allResults?: Array<{ id?: string; name: string; lat: number; lng: number; category?: string }>;
+  requestedLimit?: number;
 }
 
 interface GroupChatProps {
@@ -30,29 +38,21 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const loadMessagesRef = useRef<() => Promise<void>>(null!);
 
   const { input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: `/api/trips/${tripId}/chat`,
-    onFinish: async (message: { content: string; toolInvocations?: Array<{ toolName: string; result?: { results?: Array<{ id?: string; name: string; lat: number; lng: number; category?: string }> } }> }) => {
-      console.log('GroupChat onFinish called with:', {
-        contentLength: message.content?.length,
-        hasToolInvocations: !!message.toolInvocations,
-        toolInvocationsCount: message.toolInvocations?.length || 0,
-        fullMessage: message,
-      });
-
+    onFinish: async (message: { content: string; toolInvocations?: Array<{ toolName: string; result?: ToolResult }> }) => {
       // AI message is already saved by the API route, just reload to show it
-      await loadMessages();
+      await loadMessagesRef.current();
 
       // Check for tool calls (place additions)
       if (message.toolInvocations && Array.isArray(message.toolInvocations)) {
-        console.log('Processing tool invocations:', message.toolInvocations.length);
         for (const invocation of message.toolInvocations) {
-          console.log('Processing invocation:', invocation.toolName, 'Result:', invocation.result);
           if (invocation.toolName === 'search_places') {
-            console.log('Found search_places invocation, result structure:', JSON.stringify(invocation.result, null, 2));
             
-            const toolResult = invocation.result;
+            const toolResult = invocation.result as ToolResult | undefined;
             const results = toolResult?.results || toolResult?.allResults || [];
             const requestedLimit = toolResult?.requestedLimit || results.length;
             
@@ -110,52 +110,18 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
                   created_by: user?.id || null,
                 });
                 if (!error) addedCount++;
-              } catch (error) {
-                console.error('Error creating place:', error);
+              } catch {
+                // Failed to create place - continue with next
               }
             }
           }
         }
-      } else {
-        console.log('No tool invocations found');
       }
     },
   });
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    loadMessages();
-
-    // Subscribe to new messages
-    const channel = supabase
-      .channel(`trip-messages:${tripId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'trip_messages',
-          filter: `trip_id=eq.${tripId}`,
-        },
-        (payload) => {
-          loadMessageWithProfile(payload.new as Message);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [isOpen, tripId]);
-
   async function loadMessages() {
     setLoading(true);
-    
-    // Check session first
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('GroupChat: Session exists:', !!session);
-    console.log('GroupChat: User ID:', user?.id);
     
     // Load messages without join first to avoid issues with NULL user_id
     const { data: messagesData, error: messagesError } = await supabase
@@ -165,10 +131,6 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
       .order('created_at', { ascending: true });
 
     if (messagesError) {
-      console.error('Error loading messages:', messagesError);
-      console.error('Error code:', messagesError.code);
-      console.error('Error message:', messagesError.message);
-      console.error('Error details:', JSON.stringify(messagesError, null, 2));
       setMessages([]);
       setLoading(false);
       return;
@@ -181,69 +143,101 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
     }
 
     // Get unique user IDs (excluding NULL for AI messages)
-    const userIds = [...new Set(messagesData.map((m: any) => m.user_id).filter(Boolean))];
+    const userIds = [...new Set(messagesData.map((m: Message) => m.user_id).filter(Boolean))] as string[];
     
     // Load profiles for users
-    let profilesMap = new Map();
+    let profilesMap = new Map<string, MessageProfile>();
     if (userIds.length > 0) {
-      const { data: profilesData, error: profilesError } = await supabase
+      const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .in('id', userIds);
       
-      if (profilesError) {
-        console.error('Error loading profiles:', profilesError);
-      }
-      
       if (profilesData) {
-        console.log('Loaded profiles:', profilesData.length, 'for user IDs:', userIds);
-        profilesMap = new Map(profilesData.map((p: any) => [p.id, p]));
-        // Log each profile for debugging
-        profilesData.forEach((p: any) => {
-          console.log(`Profile for ${p.id}:`, { full_name: p.full_name, email: p.email });
-        });
-      } else {
-        console.warn('No profiles found for user IDs:', userIds);
+        profilesMap = new Map(profilesData.map((p: MessageProfile) => [p.id, p]));
       }
     }
 
     // Combine messages with profiles
-    const messagesWithProfiles = messagesData.map((msg: any) => {
-      const profile = msg.user_id ? profilesMap.get(msg.user_id) : undefined;
-      if (msg.user_id && !profile) {
-        console.warn('No profile found for user ID:', msg.user_id, 'in message:', msg.id);
-      }
-      return {
-        ...msg,
-        profiles: profile,
-      };
-    });
+    const messagesWithProfiles = messagesData.map((msg: Message) => ({
+      ...msg,
+      profiles: msg.user_id ? profilesMap.get(msg.user_id) : undefined,
+    }));
 
     setMessages(messagesWithProfiles);
     setLoading(false);
     scrollToBottom();
   }
 
+  // Assign ref for use in onFinish callback
+  loadMessagesRef.current = loadMessages;
+
+  // Set up realtime subscription
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Load initial messages
+    loadMessages();
+
+    // Subscribe to new messages using both postgres_changes and broadcast
+    const channel = supabase
+      .channel(`trip-chat:${tripId}`, {
+        config: {
+          broadcast: { self: false },
+        },
+      })
+      // Listen for postgres_changes (requires Realtime enabled on table)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trip_messages',
+          filter: `trip_id=eq.${tripId}`,
+        },
+        async (payload) => {
+          await loadMessageWithProfile(payload.new as Message);
+        }
+      )
+      // Also listen for broadcast messages (fallback, more reliable)
+      .on('broadcast', { event: 'new-message' }, async ({ payload }) => {
+        if (payload?.message) {
+          await loadMessageWithProfile(payload.message as Message);
+        }
+      })
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      channel.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, tripId]);
+
   async function loadMessageWithProfile(message: Message) {
-    // Check if message already exists to avoid duplicates
-    if (messages.some(m => m.id === message.id)) {
-      return;
-    }
-    
+    // Load profile if needed
+    const messageWithProfile: Message = { ...message };
     if (message.user_id) {
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .eq('id', message.user_id)
         .single();
 
-      if (profileError) {
-        console.error('Error loading profile:', profileError);
-      } else {
-        message.profiles = profile || undefined;
+      if (profile) {
+        messageWithProfile.profiles = profile;
       }
     }
-    setMessages((prev) => [...prev, message]);
+    
+    // Add message to state (check for duplicates)
+    setMessages((prev) => {
+      if (prev.some(m => m.id === messageWithProfile.id)) {
+        return prev;
+      }
+      return [...prev, messageWithProfile];
+    });
+    
     scrollToBottom();
   }
 
@@ -271,19 +265,32 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
       }, 1000);
     } else {
       // Normal group chat message - save directly to database
-      const { error } = await supabase.from('trip_messages').insert({
-        trip_id: tripId,
-        user_id: user.id,
-        content: messageContent,
-        role: 'user',
-      } as any);
+      const { data: newMessage, error } = await supabase
+        .from('trip_messages')
+        .insert({
+          trip_id: tripId,
+          user_id: user.id,
+          content: messageContent,
+          role: 'user',
+        } as any)
+        .select()
+        .single();
 
       if (error) {
-        console.error('Failed to save message:', error);
         alert('Failed to send message. Please try again.');
       } else {
         // Clear input using the useChat hook's input state
         handleInputChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
+        
+        // Broadcast the new message to other users
+        if (channelRef.current && newMessage) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'new-message',
+            payload: { message: newMessage },
+          });
+        }
+        
         await loadMessages();
       }
     }
@@ -399,7 +406,7 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
       {/* Input */}
       <form onSubmit={handleSend} className="p-4" style={{ borderTop: '1px solid var(--border)' }}>
         <p className="text-xs mb-2" style={{ color: 'var(--muted-foreground)' }}>
-          Say <span className="font-semibold" style={{ color: 'var(--foreground)' }}>"Hey Trippee"</span> to ask the AI assistant
+          Say <span className="font-semibold" style={{ color: 'var(--foreground)' }}>&quot;Hey Trippee&quot;</span> to ask the AI assistant
         </p>
         <div className="flex gap-2">
           <input

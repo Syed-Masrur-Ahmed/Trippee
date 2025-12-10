@@ -10,28 +10,25 @@ export async function POST(
 ) {
   const { tripId } = await params;
   
-  // Dual authentication: try token-based first, fallback to cookie-based
-  let supabase;
-  let user;
-
-  const authHeader = request.headers.get('Authorization');
+  // Try cookie-based auth first (better for RLS), fallback to token-based
+  let supabase = await createClient();
+  let { data: { user } } = await supabase.auth.getUser();
   
-  if (authHeader) {
-    // Token-based authentication
-    supabase = createClientJS(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: { headers: { Authorization: authHeader } },
+  // If no user from cookies, try Authorization header
+  if (!user) {
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader) {
+      supabase = createClientJS(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user: tokenUser } } = await supabase.auth.getUser();
+      if (tokenUser) {
+        user = tokenUser;
       }
-    );
-  } else {
-    // Cookie-based authentication
-    supabase = await createClient();
+    }
   }
-
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  user = authUser;
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -118,7 +115,6 @@ export async function POST(
     .single();
 
   if (error) {
-    console.error('Error creating invitation:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -147,15 +143,9 @@ export async function POST(
         html: getInvitationEmailHTML(tripData.name, inviterName, inviteLink),
         text: getInvitationEmailText(tripData.name, inviterName, inviteLink),
       });
-
-      console.log(`Invitation email sent to ${email}`);
-    } else {
-      console.warn('RESEND_API_KEY not set, skipping email send. Invite link:', inviteLink);
     }
-  } catch (emailError: any) {
-    console.error('Error sending invitation email:', emailError);
-    // Don't fail the request if email fails - still return the invitation
-    // The user can still copy the link manually
+  } catch {
+    // Email send failed - continue anyway, user can copy invite link manually
   }
 
   return NextResponse.json({

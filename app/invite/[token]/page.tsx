@@ -95,8 +95,8 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     }
 
     // Add user to trip_members
-    const { error: memberError } = await supabase
-      .from('trip_members')
+    const { error: memberError } = await (supabase
+      .from('trip_members') as any)
       .insert({
         trip_id: invitation.trip_id,
         user_id: user.id,
@@ -110,8 +110,8 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     }
 
     // Update invitation status
-    await supabase
-      .from('trip_invitations')
+    await (supabase
+      .from('trip_invitations') as any)
       .update({ status: 'accepted' })
       .eq('id', invitation.id);
 

@@ -71,7 +71,8 @@ export default function TripMembersModal({
       }
 
       // Get profiles for all members
-      const userIds = membersData?.map((m) => m.user_id) || [];
+      const members = (membersData || []) as Array<{ user_id: string }>;
+      const userIds = members.map((m) => m.user_id);
       
       if (userIds.length > 0) {
         const { data: profilesData } = await supabase

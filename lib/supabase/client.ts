@@ -20,14 +20,14 @@ export async function getPlaces(tripId: string) {
 }
 
 export async function createPlace(place: Database['public']['Tables']['places']['Insert']) {
-  return supabase.from('places').insert(place).select().single();
+  return (supabase.from('places') as any).insert(place).select().single();
 }
 
 export async function updatePlace(
   id: string,
   updates: Database['public']['Tables']['places']['Update']
 ) {
-  return supabase.from('places').update(updates).eq('id', id).select().single();
+  return (supabase.from('places') as any).update(updates).eq('id', id).select().single();
 }
 
 export async function deletePlace(id: string) {
@@ -35,14 +35,14 @@ export async function deletePlace(id: string) {
 }
 
 export async function createTrip(trip: Database['public']['Tables']['trips']['Insert']) {
-  return supabase.from('trips').insert(trip).select().single();
+  return (supabase.from('trips') as any).insert(trip).select().single();
 }
 
 export async function updateTrip(
   id: string,
   updates: Database['public']['Tables']['trips']['Update']
 ) {
-  return supabase.from('trips').update(updates).eq('id', id).select().single();
+  return (supabase.from('trips') as any).update(updates).eq('id', id).select().single();
 }
 
 export async function deleteTrip(id: string) {

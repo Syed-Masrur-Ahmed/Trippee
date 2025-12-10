@@ -93,8 +93,8 @@ export default function TripSettingsModal({
     const calculatedDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     try {
-      const { error: updateError } = await supabase
-        .from('trips')
+      const { error: updateError } = await (supabase
+        .from('trips') as any)
         .update({
           start_date: startDate,
           end_date: endDate,
@@ -201,7 +201,7 @@ export default function TripSettingsModal({
                 backgroundColor: 'var(--background)',
                 color: 'var(--foreground)',
                 '--tw-ring-color': 'var(--ring)'
-              }}
+              } as React.CSSProperties}
             />
           </div>
 
@@ -220,7 +220,7 @@ export default function TripSettingsModal({
                 backgroundColor: 'var(--background)',
                 color: 'var(--foreground)',
                 '--tw-ring-color': 'var(--ring)'
-              }}
+              } as React.CSSProperties}
             />
           </div>
 

@@ -102,7 +102,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
                 backgroundColor: 'var(--background)',
                 color: 'var(--foreground)',
                 '--tw-ring-color': 'var(--ring)'
-              }}
+              } as React.CSSProperties}
             />
           )}
           <input
@@ -116,7 +116,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               backgroundColor: 'var(--background)',
               color: 'var(--foreground)',
               '--tw-ring-color': 'var(--ring)'
-            }}
+            } as React.CSSProperties}
             required
           />
           <input
@@ -130,7 +130,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               backgroundColor: 'var(--background)',
               color: 'var(--foreground)',
               '--tw-ring-color': 'var(--ring)'
-            }}
+            } as React.CSSProperties}
             required
             minLength={6}
           />

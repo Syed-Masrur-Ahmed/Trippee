@@ -151,7 +151,7 @@ export default function ShareButton({ tripId, isOwner, open, onOpenChange, showB
                     backgroundColor: 'var(--background)',
                     color: 'var(--foreground)',
                     '--tw-ring-color': 'var(--ring)'
-                  }}
+                  } as React.CSSProperties}
                   required
                   disabled={loading}
                 />

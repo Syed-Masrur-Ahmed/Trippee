@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { TiptapContent } from '@/lib/supabase/schema.types';
 
 interface NotesEditorProps {
   tripId: string;
@@ -32,15 +33,15 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
     try {
       if (noteIdRef.current) {
         // Update existing note
-        const { error } = await supabase
-          .from('notes')
+        const { error } = await (supabase
+          .from('notes') as any)
           .update({ content })
           .eq('id', noteIdRef.current);
 
       } else {
         // Create new note
-        const { data, error } = await supabase
-          .from('notes')
+        const { data, error } = await (supabase
+          .from('notes') as any)
           .insert({
             trip_id: tripId,
             place_id: placeId,
@@ -112,13 +113,13 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
         }
 
         const { data, error } = await query;
-        const note = data?.[0];
+        const noteData = data?.[0] as { id: string; content: TiptapContent | null } | undefined;
 
-        if (!error && note && isMounted) {
-          noteIdRef.current = note.id;
-          if (note.content) {
+        if (!error && noteData && isMounted && editor) {
+          noteIdRef.current = noteData.id;
+          if (noteData.content) {
             isRemoteUpdateRef.current = true;
-            editor.commands.setContent(note.content);
+            editor.commands.setContent(noteData.content);
             isRemoteUpdateRef.current = false;
           }
         }

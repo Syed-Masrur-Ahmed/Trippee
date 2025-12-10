@@ -63,7 +63,7 @@ export default function PlaceModal({ place, isOpen, onClose, onSave, onDelete }:
               backgroundColor: 'var(--background)',
               color: 'var(--foreground)',
               '--tw-ring-color': 'var(--ring)'
-            }}
+            } as React.CSSProperties}
             autoFocus
           />
         </div>

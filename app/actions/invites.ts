@@ -30,62 +30,53 @@ export async function getPendingInvites(): Promise<PendingInvite[]> {
   
   // Get current user
   const { data: { user } } = await supabase.auth.getUser();
-  console.log('getPendingInvites - user:', user?.id, user?.email);
   if (!user) {
-    console.log('getPendingInvites - no user');
     return [];
   }
 
   // Get user's profile to match email
-  const { data: profile, error: profileError } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('email')
     .eq('id', user.id)
     .single();
 
-  console.log('getPendingInvites - profile:', profile, 'error:', profileError);
+  const profile = profileData as { email: string } | null;
+  const userEmail = profile?.email;
 
-  if (!profile?.email) {
-    console.log('getPendingInvites - no profile email');
+  if (!userEmail) {
     return [];
   }
 
-  // Try fetching ALL invitations first (no filters) to see if RLS is blocking
-  const { data: allInvitesNoFilter, error: allError } = await supabase
-    .from('trip_invitations')
-    .select('*');
-  
-  console.log('getPendingInvites - all invites (no filter):', allInvitesNoFilter?.length, 'error:', allError);
-
   // Fetch pending invitations for this email
-  const { data: invitations, error } = await supabase
-    .from('trip_invitations')
+  const { data: invitations, error } = await (supabase
+    .from('trip_invitations') as any)
     .select('*')
-    .eq('email', profile.email)
+    .eq('email', userEmail)
     .eq('status', 'pending')
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false });
 
-  console.log('getPendingInvites - filtered invites:', invitations?.length, 'error:', error);
-
   if (error) {
-    console.error('Error fetching invitations:', error);
     return [];
   }
 
-  if (!invitations || invitations.length === 0) {
-    // Debug: check if there are ANY invitations for this email (regardless of status/expiry)
-    const { data: allInvites, error: allInvitesError } = await supabase
-      .from('trip_invitations')
-      .select('*')
-      .eq('email', profile.email);
-    
-    console.log('getPendingInvites - invites for email:', profile.email, allInvites, 'error:', allInvitesError);
+  const invitationsData = invitations as Array<{
+    id: string;
+    trip_id: string;
+    email: string;
+    status: string;
+    created_at: string;
+    expires_at: string;
+    invited_by: string;
+  }> | null;
+
+  if (!invitationsData || invitationsData.length === 0) {
     return [];
   }
 
   // Fetch trip details separately to avoid RLS issues with joins
-  const tripIds = [...new Set(invitations.map((inv: any) => inv.trip_id))];
+  const tripIds = [...new Set(invitationsData.map((inv) => inv.trip_id))];
   let tripMap = new Map();
   
   if (tripIds.length > 0) {
@@ -95,12 +86,12 @@ export async function getPendingInvites(): Promise<PendingInvite[]> {
       .in('id', tripIds);
     
     if (trips) {
-      tripMap = new Map(trips.map((t: any) => [t.id, t]));
+      tripMap = new Map((trips as any[]).map((t) => [t.id, t]));
     }
   }
 
   // Get inviter profiles separately
-  const inviterIds = [...new Set((invitations || []).map((inv: any) => inv.invited_by))];
+  const inviterIds = [...new Set(invitationsData.map((inv) => inv.invited_by))];
   let inviterMap = new Map();
   
   if (inviterIds.length > 0) {
@@ -110,12 +101,12 @@ export async function getPendingInvites(): Promise<PendingInvite[]> {
       .in('id', inviterIds);
     
     if (inviters) {
-      inviterMap = new Map(inviters.map((p: any) => [p.id, p]));
+      inviterMap = new Map((inviters as any[]).map((p) => [p.id, p]));
     }
   }
 
   // Transform the data to match our interface
-  return (invitations || []).map((inv: any) => ({
+  return invitationsData.map((inv) => ({
     id: inv.id,
     trip_id: inv.trip_id,
     email: inv.email,
@@ -138,23 +129,27 @@ export async function acceptInvite(inviteId: string): Promise<{ success: boolean
   }
 
   // Get the invitation
-  const { data: invitation, error: inviteError } = await supabase
-    .from('trip_invitations')
+  const { data: invitationData, error: inviteError } = await (supabase
+    .from('trip_invitations') as any)
     .select('trip_id, email, expires_at')
     .eq('id', inviteId)
     .eq('status', 'pending')
     .single();
+
+  const invitation = invitationData as { trip_id: string; email: string; expires_at: string } | null;
 
   if (inviteError || !invitation) {
     return { success: false, error: 'Invitation not found or already processed' };
   }
 
   // Verify the invitation is for this user's email
-  const { data: profile } = await supabase
+  const { data: profileData } = await supabase
     .from('profiles')
     .select('email')
     .eq('id', user.id)
     .single();
+
+  const profile = profileData as { email: string } | null;
 
   if (!profile || profile.email !== invitation.email) {
     return { success: false, error: 'This invitation is not for you' };
@@ -175,8 +170,8 @@ export async function acceptInvite(inviteId: string): Promise<{ success: boolean
 
   if (existingMember) {
     // Already a member, just update the invitation status
-    await supabase
-      .from('trip_invitations')
+    await (supabase
+      .from('trip_invitations') as any)
       .update({ status: 'accepted' })
       .eq('id', inviteId);
     
@@ -185,8 +180,8 @@ export async function acceptInvite(inviteId: string): Promise<{ success: boolean
   }
 
   // Add user to trip_members
-  const { error: memberError } = await supabase
-    .from('trip_members')
+  const { error: memberError } = await (supabase
+    .from('trip_members') as any)
     .insert({
       trip_id: invitation.trip_id,
       user_id: user.id,
@@ -198,8 +193,8 @@ export async function acceptInvite(inviteId: string): Promise<{ success: boolean
   }
 
   // Update invitation status
-  const { error: updateError } = await supabase
-    .from('trip_invitations')
+  const { error: updateError } = await (supabase
+    .from('trip_invitations') as any)
     .update({ status: 'accepted' })
     .eq('id', inviteId);
 
@@ -222,29 +217,33 @@ export async function declineInvite(inviteId: string): Promise<{ success: boolea
   }
 
   // Verify the invitation is for this user's email
-  const { data: invitation } = await supabase
-    .from('trip_invitations')
+  const { data: invitationData } = await (supabase
+    .from('trip_invitations') as any)
     .select('email')
     .eq('id', inviteId)
     .single();
+
+  const invitation = invitationData as { email: string } | null;
 
   if (!invitation) {
     return { success: false, error: 'Invitation not found' };
   }
 
-  const { data: profile } = await supabase
+  const { data: profileData } = await supabase
     .from('profiles')
     .select('email')
     .eq('id', user.id)
     .single();
+
+  const profile = profileData as { email: string } | null;
 
   if (!profile || profile.email !== invitation.email) {
     return { success: false, error: 'This invitation is not for you' };
   }
 
   // Update invitation status
-  const { error } = await supabase
-    .from('trip_invitations')
+  const { error } = await (supabase
+    .from('trip_invitations') as any)
     .update({ status: 'declined' })
     .eq('id', inviteId);
 

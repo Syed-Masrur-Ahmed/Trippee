@@ -123,12 +123,13 @@ export async function POST(
   const inviteLink = `${baseUrl}/invite/${invitationData.token}`;
 
   // Get inviter's name for email
-  const { data: inviterProfile } = await supabase
+  const { data: inviterProfileData } = await supabase
     .from('profiles')
     .select('full_name, email')
     .eq('id', user.id)
     .single();
 
+  const inviterProfile = inviterProfileData as { full_name: string | null; email: string | null } | null;
   const inviterName = inviterProfile?.full_name || inviterProfile?.email?.split('@')[0] || 'Someone';
 
   // Send email invitation

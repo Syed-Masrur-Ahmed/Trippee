@@ -43,6 +43,9 @@ export async function GET(
       return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
     }
 
+    // Type assertion: trip is guaranteed to be non-null after the check above
+    const tripData = trip as { id: string; name: string; start_date: string | null; end_date: string | null; trip_days: number };
+
     // Fetch places
     const { data: places, error: placesError } = await supabase
       .from('places')
@@ -137,14 +140,14 @@ export async function GET(
 
     // Helper function to calculate date for a day
     function getDateForDay(day: number): string {
-      if (!trip.start_date) {
+      if (!tripData.start_date) {
         return '';
       }
       
       try {
         // Parse the date string (format: YYYY-MM-DD from PostgreSQL DATE type)
         // Handle both date-only strings and datetime strings
-        let dateStr = trip.start_date;
+        let dateStr = tripData.start_date;
         if (dateStr.includes('T')) {
           // If it includes time, extract just the date part
           dateStr = dateStr.split('T')[0];
@@ -193,22 +196,22 @@ export async function GET(
     // Header
     doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
-    const titleWidth = doc.getTextWidth(trip.name);
-    doc.text(trip.name, (pageWidth - titleWidth) / 2, yPosition);
+    const titleWidth = doc.getTextWidth(tripData.name);
+    doc.text(tripData.name, (pageWidth - titleWidth) / 2, yPosition);
     yPosition += 10;
 
     // Trip dates
-    if (trip.start_date || trip.end_date) {
+    if (tripData.start_date || tripData.end_date) {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(100, 100, 100);
       let dateText = '';
-      if (trip.start_date && trip.end_date) {
-        dateText = `Trip Dates: ${formatDate(trip.start_date)} - ${formatDate(trip.end_date)}`;
-      } else if (trip.start_date) {
-        dateText = `Start Date: ${formatDate(trip.start_date)}`;
-      } else if (trip.end_date) {
-        dateText = `End Date: ${formatDate(trip.end_date)}`;
+      if (tripData.start_date && tripData.end_date) {
+        dateText = `Trip Dates: ${formatDate(tripData.start_date)} - ${formatDate(tripData.end_date)}`;
+      } else if (tripData.start_date) {
+        dateText = `Start Date: ${formatDate(tripData.start_date)}`;
+      } else if (tripData.end_date) {
+        dateText = `End Date: ${formatDate(tripData.end_date)}`;
       }
       const dateWidth = doc.getTextWidth(dateText);
       doc.text(dateText, (pageWidth - dateWidth) / 2, yPosition);
@@ -238,7 +241,7 @@ export async function GET(
     }
 
     // Itinerary by day
-    const tripDays = trip.trip_days || Object.keys(placesByDay).length || 1;
+    const tripDays = tripData.trip_days || Object.keys(placesByDay).length || 1;
     
     for (let day = 1; day <= tripDays; day++) {
       const dayPlaces = placesByDay[day] || [];
@@ -411,7 +414,7 @@ export async function GET(
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${trip.name.replace(/[^a-z0-9]/gi, '_')}_itinerary.pdf"`,
+        'Content-Disposition': `attachment; filename="${tripData.name.replace(/[^a-z0-9]/gi, '_')}_itinerary.pdf"`,
         'Content-Length': pdfBuffer.length.toString(),
       },
     });

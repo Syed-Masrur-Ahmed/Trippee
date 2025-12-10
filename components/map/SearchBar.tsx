@@ -99,7 +99,7 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
             color: 'var(--foreground)',
             boxShadow: 'var(--shadow-lg)',
             '--tw-ring-color': 'var(--ring)'
-          }}
+          } as React.CSSProperties}
         />
         {loading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">

@@ -74,13 +74,20 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
             };
             
             // Fetch existing places for duplicate checking
-            const { data: existingPlaces } = await supabase
+            const { data: existingPlacesData } = await supabase
               .from('places')
               .select('name, lat, lng, place_id')
               .eq('trip_id', tripId);
             
+            const existingPlaces = (existingPlacesData || []) as Array<{
+              name: string | null;
+              lat: number;
+              lng: number;
+              place_id: string | null;
+            }>;
+            
             const isDuplicate = (place: { id?: string; name: string; lat: number; lng: number }) => {
-              if (!existingPlaces?.length) return false;
+              if (!existingPlaces.length) return false;
               const placeName = place.name.toLowerCase().trim();
               return existingPlaces.some((existing) => {
                 if (place.id && existing.place_id && place.id === existing.place_id) return true;
@@ -414,12 +421,12 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
             onChange={handleInputChange}
             placeholder="Type a message..."
             className="flex-1 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 transition-all"
-            style={{
-              border: '1px solid var(--input)',
-              backgroundColor: 'var(--background)',
-              color: 'var(--foreground)',
-              '--tw-ring-color': 'var(--ring)'
-            }}
+              style={{
+                border: '1px solid var(--input)',
+                backgroundColor: 'var(--background)',
+                color: 'var(--foreground)',
+                '--tw-ring-color': 'var(--ring)'
+              } as React.CSSProperties}
             disabled={isLoading}
           />
           <button

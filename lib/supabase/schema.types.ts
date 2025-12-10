@@ -174,6 +174,7 @@ export interface Database {
           id: string
           trip_id: string
           place_id: string | null
+          day_number: number | null
           content: Json
           last_edited_by: string | null
           created_at: string
@@ -183,6 +184,7 @@ export interface Database {
           id?: string
           trip_id: string
           place_id?: string | null
+          day_number?: number | null
           content?: Json
           last_edited_by?: string | null
           created_at?: string
@@ -192,6 +194,7 @@ export interface Database {
           id?: string
           trip_id?: string
           place_id?: string | null
+          day_number?: number | null
           content?: Json
           last_edited_by?: string | null
           created_at?: string

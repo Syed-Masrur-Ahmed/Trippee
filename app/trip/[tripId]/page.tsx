@@ -663,6 +663,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         onSearchResult={handleSearchResult}
       />
       <ItineraryPanel
+        tripId={tripId}
         places={places}
         tripDays={
           trip?.trip_days || 

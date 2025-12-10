@@ -1,18 +1,43 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconArrowLeft } from '@tabler/icons-react';
-import NotesSidebar from './NotesSidebar';
+import NotesSidebar, { type NoteSelection } from './NotesSidebar';
 import NotesEditor from './NotesEditor';
+import { supabase } from '@/lib/supabase/client';
 
 interface NotesLayoutProps {
   tripId: string;
 }
 
 export default function NotesLayout({ tripId }: NotesLayoutProps) {
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [selectedNote, setSelectedNote] = useState<NoteSelection>(null);
+  const [tripDays, setTripDays] = useState(3);
   const router = useRouter();
+
+  // Load trip days
+  useEffect(() => {
+    async function loadTrip() {
+      const { data } = await supabase
+        .from('trips')
+        .select('trip_days, start_date, end_date')
+        .eq('id', tripId)
+        .single();
+      
+      if (data) {
+        if (data.trip_days) {
+          setTripDays(data.trip_days);
+        } else if (data.start_date && data.end_date) {
+          const start = new Date(data.start_date);
+          const end = new Date(data.end_date);
+          const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          setTripDays(days);
+        }
+      }
+    }
+    loadTrip();
+  }, [tripId]);
 
   return (
     <div className="flex h-screen" style={{ backgroundColor: 'var(--background)' }}>
@@ -37,12 +62,21 @@ export default function NotesLayout({ tripId }: NotesLayoutProps) {
             <span className="text-sm font-medium">Back to Trip</span>
           </button>
         </div>
-        <NotesSidebar tripId={tripId} selectedPlaceId={selectedPlaceId} onSelectPlace={setSelectedPlaceId} />
+        <NotesSidebar 
+          tripId={tripId} 
+          tripDays={tripDays}
+          selectedNote={selectedNote} 
+          onSelectNote={setSelectedNote} 
+        />
       </div>
 
       {/* Editor */}
       <div className="flex-1 overflow-hidden">
-        <NotesEditor key={selectedPlaceId || 'general'} tripId={tripId} placeId={selectedPlaceId} />
+        <NotesEditor 
+          key={selectedNote || 'general'} 
+          tripId={tripId} 
+          noteSelection={selectedNote} 
+        />
       </div>
     </div>
   );

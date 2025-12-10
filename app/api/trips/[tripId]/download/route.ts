@@ -57,20 +57,24 @@ export async function GET(
     // Fetch notes (non-critical, continue even if this fails)
     let generalNote: any = null;
     const placeNotesMap = new Map<string, any>();
+    const dayNotesMap = new Map<number, any>();
     
     const { data: allNotes, error: notesError } = await supabase
       .from('notes')
-      .select('place_id, content')
+      .select('place_id, day_number, content')
       .eq('trip_id', tripId);
 
     if (!notesError && allNotes) {
-      // Extract general notes (place_id is null)
-      generalNote = allNotes.find((n) => n.place_id === null);
+      // Extract general notes (place_id is null and day_number is null)
+      generalNote = allNotes.find((n: any) => n.place_id === null && n.day_number === null);
       
       // Create a map of place notes
-      allNotes.forEach((note) => {
+      allNotes.forEach((note: any) => {
         if (note.place_id) {
           placeNotesMap.set(note.place_id, note.content);
+        }
+        if (note.day_number) {
+          dayNotesMap.set(note.day_number, note.content);
         }
       });
     }
@@ -262,6 +266,22 @@ export async function GET(
       doc.text(dayTitle, margin, yPosition);
       doc.setTextColor(0, 0, 0);
       yPosition += 8;
+
+      // Day notes
+      const dayNoteContent = dayNotesMap.get(day);
+      if (dayNoteContent) {
+        const dayNotesText = extractTextFromTiptap(dayNoteContent);
+        if (dayNotesText) {
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(85, 85, 85);
+          const dayNotesLines = doc.splitTextToSize(dayNotesText, maxWidth);
+          checkNewPage(dayNotesLines.length * 5 + 5);
+          doc.text(dayNotesLines, margin, yPosition);
+          yPosition += dayNotesLines.length * 5 + 3;
+          doc.setTextColor(0, 0, 0);
+        }
+      }
 
       if (dayPlaces.length === 0) {
         doc.setFontSize(11);

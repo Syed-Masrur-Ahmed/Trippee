@@ -7,13 +7,27 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/hooks/useAuth';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { TiptapContent } from '@/lib/supabase/schema.types';
+import type { NoteSelection } from './NotesSidebar';
 
 interface NotesEditorProps {
   tripId: string;
-  placeId: string | null;
+  noteSelection: NoteSelection;
 }
 
-export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
+// Parse the note selection to determine if it's a place, day, or general note
+function parseNoteSelection(selection: NoteSelection): { placeId: string | null; dayNumber: number | null } {
+  if (selection === null) {
+    return { placeId: null, dayNumber: null }; // General trip note
+  }
+  if (selection.startsWith('day-')) {
+    const dayNumber = parseInt(selection.replace('day-', ''), 10);
+    return { placeId: null, dayNumber }; // Day note
+  }
+  return { placeId: selection, dayNumber: null }; // Place note
+}
+
+export default function NotesEditor({ tripId, noteSelection }: NotesEditorProps) {
+  const { placeId, dayNumber } = parseNoteSelection(noteSelection);
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,25 +47,52 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
     try {
       if (noteIdRef.current) {
         // Update existing note
-        const { error } = await (supabase
+        await (supabase
           .from('notes') as any)
           .update({ content })
           .eq('id', noteIdRef.current);
 
       } else {
-        // Create new note
-        const { data, error } = await (supabase
-          .from('notes') as any)
-          .insert({
-            trip_id: tripId,
-            place_id: placeId,
-            content: content,
-          })
+        // Try to find existing note first (in case it was created in another session)
+        let query = supabase
+          .from('notes')
           .select('id')
-          .single();
+          .eq('trip_id', tripId)
+          .limit(1);
 
-        if (!error && data) {
-          noteIdRef.current = data.id;
+        if (dayNumber !== null) {
+          query = query.eq('day_number', dayNumber).is('place_id', null);
+        } else if (placeId !== null) {
+          query = query.eq('place_id', placeId).is('day_number', null);
+        } else {
+          query = query.is('place_id', null).is('day_number', null);
+        }
+
+        const { data: existingNote } = await query;
+        
+        if (existingNote && existingNote[0]) {
+          // Note exists, update it
+          noteIdRef.current = existingNote[0].id;
+          await (supabase
+            .from('notes') as any)
+            .update({ content })
+            .eq('id', noteIdRef.current);
+        } else {
+          // Create new note
+          const { data, error } = await (supabase
+            .from('notes') as any)
+            .insert({
+              trip_id: tripId,
+              place_id: placeId,
+              day_number: dayNumber,
+              content: content,
+            })
+            .select('id')
+            .single();
+
+          if (!error && data) {
+            noteIdRef.current = data.id;
+          }
         }
       }
     } catch {
@@ -59,7 +100,7 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
     } finally {
       setSaving(false);
     }
-  }, [user, tripId, placeId]);
+  }, [user, tripId, placeId, dayNumber]);
 
   // Editor setup
   const editor = useEditor({
@@ -96,6 +137,14 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
     if (!user || !tripId || !editor) return;
 
     let isMounted = true;
+    
+    // Reset note ID when selection changes
+    noteIdRef.current = null;
+    // Reset editor content
+    isRemoteUpdateRef.current = true;
+    editor.commands.setContent('');
+    isRemoteUpdateRef.current = false;
+    setLoading(true);
 
     async function loadContent() {
       try {
@@ -106,10 +155,16 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
           .order('updated_at', { ascending: false })
           .limit(1);
 
-        if (placeId === null) {
-          query = query.is('place_id', null);
+        // Query based on note type
+        if (dayNumber !== null) {
+          // Day note
+          query = query.eq('day_number', dayNumber).is('place_id', null);
+        } else if (placeId !== null) {
+          // Place note
+          query = query.eq('place_id', placeId).is('day_number', null);
         } else {
-          query = query.eq('place_id', placeId);
+          // General trip note
+          query = query.is('place_id', null).is('day_number', null);
         }
 
         const { data, error } = await query;
@@ -131,7 +186,8 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
     }
 
     // Set up realtime channel
-    const channelName = `notes:${tripId}:${placeId || 'general'}`;
+    const channelId = dayNumber !== null ? `day-${dayNumber}` : (placeId || 'general');
+    const channelName = `notes:${tripId}:${channelId}`;
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: false },
@@ -188,7 +244,7 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
       }
       channel.unsubscribe();
     };
-  }, [user, tripId, placeId, editor, saveContent]);
+  }, [user, tripId, placeId, dayNumber, editor, saveContent]);
 
   if (loading) {
     return (
@@ -198,13 +254,20 @@ export default function NotesEditor({ tripId, placeId }: NotesEditorProps) {
     );
   }
 
+  // Determine the title based on note type
+  const getTitle = () => {
+    if (dayNumber !== null) return `Day ${dayNumber} Notes`;
+    if (placeId !== null) return 'Place Notes';
+    return 'General Trip Notes';
+  };
+
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--background)' }}>
       {/* Header */}
       <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--card)' }}>
         <div>
           <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-            {placeId ? 'Place Notes' : 'General Trip Notes'}
+            {getTitle()}
           </h2>
           <div className="flex items-center gap-2 text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
             <span className="flex items-center gap-1">

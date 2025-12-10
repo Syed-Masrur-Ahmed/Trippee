@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -9,6 +9,7 @@ import {
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core';
+import { supabase } from '@/lib/supabase/client';
 
 interface Place {
   id: string;
@@ -21,10 +22,41 @@ interface Place {
 }
 
 interface ItineraryPanelProps {
+  tripId: string;
   places: Place[];
   tripDays?: number;
   onPlaceMoved?: (placeId: string, newDay: number | null, newOrder: number) => void;
   onPlaceEdit?: (place: Place) => void;
+}
+
+// Helper function to extract text from Tiptap JSON content
+function extractTextFromTiptap(content: any): string {
+  if (!content || typeof content !== 'object') return '';
+  
+  let text = '';
+  
+  function traverse(node: any) {
+    if (node.type === 'text' && node.text) {
+      text += node.text + ' ';
+    }
+    if (node.content && Array.isArray(node.content)) {
+      node.content.forEach(traverse);
+    }
+  }
+  
+  if (content.type === 'doc' && content.content) {
+    content.content.forEach(traverse);
+  }
+  
+  return text.trim();
+}
+
+// Get first few words from text (for preview)
+function getPreviewText(text: string, maxWords: number = 5): string {
+  if (!text) return '';
+  const words = text.split(/\s+/).slice(0, maxWords);
+  const preview = words.join(' ');
+  return text.split(/\s+/).length > maxWords ? preview + '...' : preview;
 }
 
 function DraggablePlace({
@@ -167,6 +199,7 @@ function DroppableZone({
 }
 
 export default function ItineraryPanel({
+  tripId,
   places,
   tripDays = 3,
   onPlaceMoved,
@@ -175,6 +208,34 @@ export default function ItineraryPanel({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isUnassignedCollapsed, setIsUnassignedCollapsed] = useState(false);
   const [activePlace, setActivePlace] = useState<Place | null>(null);
+  const [dayNotes, setDayNotes] = useState<Record<number, string>>({});
+
+  // Fetch day notes
+  useEffect(() => {
+    async function loadDayNotes() {
+      if (!tripId) return;
+      
+      const { data } = await supabase
+        .from('notes')
+        .select('day_number, content')
+        .eq('trip_id', tripId)
+        .not('day_number', 'is', null);
+      
+      if (data) {
+        const notesMap: Record<number, string> = {};
+        data.forEach((note: any) => {
+          if (note.day_number && note.content) {
+            const text = extractTextFromTiptap(note.content);
+            if (text) {
+              notesMap[note.day_number] = getPreviewText(text, 4);
+            }
+          }
+        });
+        setDayNotes(notesMap);
+      }
+    }
+    loadDayNotes();
+  }, [tripId]);
 
   // Group places by day
   const unassignedPlaces = places.filter((p) => p.day_assigned === null);
@@ -321,9 +382,20 @@ export default function ItineraryPanel({
         <div className="flex-1 overflow-y-auto">
           {Array.from({ length: tripDays }, (_, i) => i + 1).map((day) => (
             <div key={day} className="p-4" style={{ borderBottom: '1px solid var(--border)' }}>
-              <h3 className="text-sm font-semibold mb-2 uppercase" style={{ color: 'var(--primary)' }}>
-                Day {day} ({dayGroups[day]?.length || 0})
-              </h3>
+              <div className="flex items-baseline gap-2 mb-2">
+                <h3 className="text-sm font-semibold uppercase" style={{ color: 'var(--primary)' }}>
+                  Day {day} ({dayGroups[day]?.length || 0})
+                </h3>
+                {dayNotes[day] && (
+                  <span 
+                    className="text-xs italic truncate max-w-[140px]" 
+                    style={{ color: 'var(--muted-foreground)' }}
+                    title={dayNotes[day]}
+                  >
+                    — {dayNotes[day]}
+                  </span>
+                )}
+              </div>
               <DroppableZone id={`day-${day}`}>
                 {!dayGroups[day] || dayGroups[day].length === 0 ? (
                   <p className="text-sm italic" style={{ color: 'var(--muted-foreground)' }}>No places assigned</p>

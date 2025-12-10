@@ -25,19 +25,22 @@ Trippee is a real-time collaborative travel planning application that combines i
 ### AI Travel Assistant
 - **"Hey Trippee" activation** in group chat
 - **Smart place recommendations** based on your location and preferences
-- **Automatic itinerary generation** with intelligent clustering
 - **Detailed place information** including ratings, reviews, and opening hours
 - Powered by Google Gemini AI
 
+**Note:** Itinerary generation uses deterministic algorithms (k-means clustering and route optimization) for fast, reliable results without AI dependency.
+
 ### Smart Itinerary Builder
 - **Drag-and-drop organization** for day-by-day planning
-- **AI-powered auto-generation** that clusters nearby places
+- **Automatic itinerary generation** using k-means clustering and route optimization
+- **Intelligent place grouping** that clusters nearby places geographically
 - **Route optimization** using nearest-neighbor algorithms
 - **PDF export** for offline access during your trip
 
 ### Collaborative Notes
 - **Real-time rich text editing** with presence indicators
 - **Per-place notes** to capture details about each destination
+- **Day notes** for each day in your itinerary with previews in the itinerary panel
 - **General trip notes** for overall planning
 - Built with Tiptap editor
 
@@ -61,7 +64,7 @@ Trippee is a real-time collaborative travel planning application that combines i
 | **Database** | Supabase (PostgreSQL) |
 | **Authentication** | Supabase Auth (Email/Password, Google OAuth) |
 | **Real-time** | Supabase Realtime |
-| **AI** | Vercel AI SDK, Google Gemini (2.5 Flash) |
+| **AI** | Vercel AI SDK, Google Gemini (2.5 Flash) - Chat assistant only |
 | **Maps** | Mapbox GL JS, react-map-gl |
 | **Rich Text** | Tiptap |
 | **Drag & Drop** | @dnd-kit |

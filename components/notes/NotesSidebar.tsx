@@ -12,13 +12,17 @@ interface Place {
   day_assigned: number | null;
 }
 
+// Selection can be: null (general notes), place ID, or day number (prefixed with "day-")
+export type NoteSelection = string | null;
+
 interface NotesSidebarProps {
   tripId: string;
-  selectedPlaceId: string | null;
-  onSelectPlace: (placeId: string | null) => void;
+  tripDays?: number;
+  selectedNote: NoteSelection;
+  onSelectNote: (selection: NoteSelection) => void;
 }
 
-export default function NotesSidebar({ tripId, selectedPlaceId, onSelectPlace }: NotesSidebarProps) {
+export default function NotesSidebar({ tripId, tripDays = 3, selectedNote, onSelectNote }: NotesSidebarProps) {
   const { user } = useAuth();
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +65,11 @@ export default function NotesSidebar({ tripId, selectedPlaceId, onSelectPlace }:
     }
   });
 
+  // Helper to check if a day is selected
+  const isDaySelected = (day: number) => selectedNote === `day-${day}`;
+  const isPlaceSelected = (placeId: string) => selectedNote === placeId;
+  const isGeneralSelected = selectedNote === null;
+
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--card)' }}>
       {/* Header */}
@@ -78,19 +87,19 @@ export default function NotesSidebar({ tripId, selectedPlaceId, onSelectPlace }:
           <div className="p-2">
             {/* General Trip Notes */}
             <button
-              onClick={() => onSelectPlace(null)}
+              onClick={() => onSelectNote(null)}
               className="w-full text-left p-3 rounded-lg transition-colors mb-2"
               style={{
-                backgroundColor: selectedPlaceId === null ? 'var(--accent)' : 'transparent',
-                border: selectedPlaceId === null ? '1px solid var(--primary)' : '1px solid transparent',
+                backgroundColor: isGeneralSelected ? 'var(--accent)' : 'transparent',
+                border: isGeneralSelected ? '1px solid var(--primary)' : '1px solid transparent',
               }}
               onMouseEnter={(e) => {
-                if (selectedPlaceId !== null) {
+                if (!isGeneralSelected) {
                   e.currentTarget.style.backgroundColor = 'var(--accent)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (selectedPlaceId !== null) {
+                if (!isGeneralSelected) {
                   e.currentTarget.style.backgroundColor = 'transparent';
                 }
               }}
@@ -109,19 +118,19 @@ export default function NotesSidebar({ tripId, selectedPlaceId, onSelectPlace }:
                 {unassignedPlaces.map((place) => (
                   <button
                     key={place.id}
-                    onClick={() => onSelectPlace(place.id)}
+                    onClick={() => onSelectNote(place.id)}
                     className="w-full text-left p-2 rounded-lg transition-colors mb-1"
                     style={{
-                      backgroundColor: selectedPlaceId === place.id ? 'var(--accent)' : 'transparent',
-                      border: selectedPlaceId === place.id ? '1px solid var(--primary)' : '1px solid transparent',
+                      backgroundColor: isPlaceSelected(place.id) ? 'var(--accent)' : 'transparent',
+                      border: isPlaceSelected(place.id) ? '1px solid var(--primary)' : '1px solid transparent',
                     }}
                     onMouseEnter={(e) => {
-                      if (selectedPlaceId !== place.id) {
+                      if (!isPlaceSelected(place.id)) {
                         e.currentTarget.style.backgroundColor = 'var(--accent)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (selectedPlaceId !== place.id) {
+                      if (!isPlaceSelected(place.id)) {
                         e.currentTarget.style.backgroundColor = 'transparent';
                       }
                     }}
@@ -134,30 +143,57 @@ export default function NotesSidebar({ tripId, selectedPlaceId, onSelectPlace }:
               </div>
             )}
 
-            {/* Places by Day */}
-            {Object.keys(placesByDay).map((day) => {
-              const dayNum = parseInt(day);
+            {/* Days and Places by Day */}
+            {Array.from({ length: tripDays }, (_, i) => i + 1).map((dayNum) => {
+              const dayPlaces = placesByDay[dayNum] || [];
               return (
-                <div key={day} className="mb-4">
+                <div key={dayNum} className="mb-4">
                   <h3 className="text-xs font-semibold uppercase mb-2 px-2" style={{ color: 'var(--primary)' }}>
                     Day {dayNum}
                   </h3>
-                  {placesByDay[dayNum].map((place) => (
+                  {/* Day Notes Button */}
+                  <button
+                    onClick={() => onSelectNote(`day-${dayNum}`)}
+                    className="w-full text-left p-2 rounded-lg transition-colors mb-1"
+                    style={{
+                      backgroundColor: isDaySelected(dayNum) ? 'var(--accent)' : 'transparent',
+                      border: isDaySelected(dayNum) ? '1px solid var(--primary)' : '1px solid transparent',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isDaySelected(dayNum)) {
+                        e.currentTarget.style.backgroundColor = 'var(--accent)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isDaySelected(dayNum)) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <div className="font-medium text-sm flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--primary)' }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Day {dayNum} Notes
+                    </div>
+                  </button>
+                  {/* Places for this day */}
+                  {dayPlaces.map((place) => (
                     <button
                       key={place.id}
-                      onClick={() => onSelectPlace(place.id)}
-                      className="w-full text-left p-2 rounded-lg transition-colors mb-1"
+                      onClick={() => onSelectNote(place.id)}
+                      className="w-full text-left p-2 pl-6 rounded-lg transition-colors mb-1"
                       style={{
-                        backgroundColor: selectedPlaceId === place.id ? 'var(--accent)' : 'transparent',
-                        border: selectedPlaceId === place.id ? '1px solid var(--primary)' : '1px solid transparent',
+                        backgroundColor: isPlaceSelected(place.id) ? 'var(--accent)' : 'transparent',
+                        border: isPlaceSelected(place.id) ? '1px solid var(--primary)' : '1px solid transparent',
                       }}
                       onMouseEnter={(e) => {
-                        if (selectedPlaceId !== place.id) {
+                        if (!isPlaceSelected(place.id)) {
                           e.currentTarget.style.backgroundColor = 'var(--accent)';
                         }
                       }}
                       onMouseLeave={(e) => {
-                        if (selectedPlaceId !== place.id) {
+                        if (!isPlaceSelected(place.id)) {
                           e.currentTarget.style.backgroundColor = 'transparent';
                         }
                       }}

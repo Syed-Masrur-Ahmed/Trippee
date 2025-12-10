@@ -22,7 +22,7 @@ const originalSurfer = Original_Surfer({
 });
 
 export const metadata: Metadata = {
-  title: "Trippee - AI-Powered Collaborative Trip Planner",
+  title: "Trippee",
   description: "Plan trips together with AI assistance",
 };
 

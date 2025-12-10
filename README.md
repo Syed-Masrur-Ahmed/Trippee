@@ -4,6 +4,8 @@
 
 Trippee is a real-time collaborative travel planning application that combines interactive mapping, AI-powered assistance, and shared note-taking to help groups plan their perfect trip together.
 
+🌐 **Live Website:** [https://trippee-ai.vercel.app](https://trippee-ai.vercel.app)
+
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript)
@@ -124,6 +126,14 @@ Trippee is a real-time collaborative travel planning application that combines i
 6. **Open your browser**
    
    Navigate to [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Live Application
+
+The application is live and available at: **[https://trippee-ai.vercel.app](https://trippee-ai.vercel.app)**
+
+You can sign up and start planning trips right away!
 
 ---
 

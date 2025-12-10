@@ -70,9 +70,10 @@ export default function NotesEditor({ tripId, noteSelection }: NotesEditorProps)
 
         const { data: existingNote } = await query;
         
-        if (existingNote && existingNote[0]) {
+        if (existingNote && existingNote.length > 0 && existingNote[0]) {
           // Note exists, update it
-          noteIdRef.current = existingNote[0].id;
+          const note = existingNote[0] as { id: string };
+          noteIdRef.current = note.id;
           await (supabase
             .from('notes') as any)
             .update({ content })

@@ -124,7 +124,7 @@ export default function MapView({ places, onMapClick, onMarkerClick, cursors = [
   }
 
   return (
-    <div className="fixed left-0 top-0 h-screen z-0" style={{ width: 'calc(100% - 320px)' }}>
+    <div className="fixed left-0 top-0 h-screen z-0 w-full sm:w-[calc(100%-320px)]">
       <Map
         {...viewport}
         onMove={handleMove}
@@ -200,7 +200,7 @@ export default function MapView({ places, onMapClick, onMarkerClick, cursors = [
         ))}
       </Map>
 
-      <div className="absolute top-20 left-4 z-[60]">
+      <div className="absolute top-20 left-4 right-4 sm:right-auto z-[60]">
         <SearchBar onSelectResult={handleSearchResult} />
       </div>
     </div>

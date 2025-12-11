@@ -319,129 +319,142 @@ export default function GroupChat({ tripId, isOpen, onClose }: GroupChatProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed right-0 top-0 h-full w-96 z-50 flex flex-col" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-xl)' }}>
-      {/* Header */}
-      <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div>
-          <h2 className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>Trip Chat</h2>
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Collaborate with your group</p>
-        </div>
-        <button
-          onClick={onClose}
-          style={{ color: 'var(--foreground)' }}
-          className="hover:opacity-70 transition-opacity"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {loading ? (
-          <div className="text-center" style={{ color: 'var(--foreground)' }}>Loading messages...</div>
-        ) : messages.length === 0 ? (
-          <div className="text-center" style={{ color: 'var(--foreground)' }}>
-            <p className="mb-2">Start the conversation!</p>
-            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Ask the AI assistant for place recommendations.</p>
+    <>
+      {/* Mobile overlay backdrop */}
+      <div 
+        className="sm:hidden fixed inset-0 bg-black/50 z-40"
+        onClick={onClose}
+      />
+      
+      {/* Chat panel - full screen on mobile, sidebar on desktop */}
+      <div 
+        className="fixed right-0 top-0 h-full z-50 flex flex-col w-full sm:w-96" 
+        style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-xl)' }}
+      >
+        {/* Header */}
+        <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div>
+            <h2 className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>Trip Chat</h2>
+            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Collaborate with your group</p>
           </div>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${
-                message.user_id === user?.id ? 'flex-row-reverse' : ''
-              }`}
-            >
-              {/* Avatar */}
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold"
-                style={{
-                  backgroundColor: message.role === 'assistant' ? 'var(--primary)' : 'var(--secondary)',
-                  color: message.role === 'assistant' ? 'var(--primary-foreground)' : 'var(--secondary-foreground)'
-                }}
-              >
-                {getSenderInitials(message)}
-              </div>
+          <button
+            onClick={onClose}
+            style={{ color: 'var(--foreground)' }}
+            className="hover:opacity-70 transition-opacity p-2"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-              {/* Message Content */}
-              <div className={`flex-1 ${message.user_id === user?.id ? 'items-end' : ''}`}>
-                <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                  {getSenderName(message)}
-                </div>
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {loading ? (
+            <div className="text-center" style={{ color: 'var(--foreground)' }}>Loading messages...</div>
+          ) : messages.length === 0 ? (
+            <div className="text-center" style={{ color: 'var(--foreground)' }}>
+              <p className="mb-2">Start the conversation!</p>
+              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Ask the AI assistant for place recommendations.</p>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex gap-3 ${
+                  message.user_id === user?.id ? 'flex-row-reverse' : ''
+                }`}
+              >
+                {/* Avatar */}
                 <div
-                  className="rounded-lg p-3"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
                   style={{
-                    backgroundColor: message.role === 'assistant'
-                      ? 'var(--muted)'
-                      : message.user_id === user?.id
-                      ? 'var(--primary)'
-                      : 'var(--accent)',
-                    border: message.role === 'assistant' ? '1px solid var(--border)' : 'none',
-                    color: message.user_id === user?.id ? 'var(--primary-foreground)' : 'var(--foreground)'
+                    backgroundColor: message.role === 'assistant' ? 'var(--primary)' : 'var(--secondary)',
+                    color: message.role === 'assistant' ? 'var(--primary-foreground)' : 'var(--secondary-foreground)'
                   }}
                 >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {getSenderInitials(message)}
                 </div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                  {new Date(message.created_at).toLocaleTimeString()}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-        {isLoading && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
-              AI
-            </div>
-            <div className="flex-1">
-              <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--muted)', border: '1px solid var(--border)' }}>
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)' }}></div>
-                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)', animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)', animationDelay: '0.2s' }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Input */}
-      <form onSubmit={handleSend} className="p-4" style={{ borderTop: '1px solid var(--border)' }}>
-        <p className="text-xs mb-2" style={{ color: 'var(--muted-foreground)' }}>
-          Say <span className="font-semibold" style={{ color: 'var(--foreground)' }}>&quot;Hey Trippee&quot;</span> to ask the AI assistant
-        </p>
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={handleInputChange}
-            placeholder="Type a message..."
-            className="flex-1 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 transition-all"
+                {/* Message Content */}
+                <div className={`flex-1 min-w-0 ${message.user_id === user?.id ? 'items-end' : ''}`}>
+                  <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                    {getSenderName(message)}
+                  </div>
+                  <div
+                    className="rounded-lg p-3"
+                    style={{
+                      backgroundColor: message.role === 'assistant'
+                        ? 'var(--muted)'
+                        : message.user_id === user?.id
+                        ? 'var(--primary)'
+                        : 'var(--accent)',
+                      border: message.role === 'assistant' ? '1px solid var(--border)' : 'none',
+                      color: message.user_id === user?.id ? 'var(--primary-foreground)' : 'var(--foreground)'
+                    }}
+                  >
+                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  </div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                    {new Date(message.created_at).toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+          {isLoading && (
+            <div className="flex gap-3">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
+                AI
+              </div>
+              <div className="flex-1">
+                <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--muted)', border: '1px solid var(--border)' }}>
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)' }}></div>
+                    <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)', animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: 'var(--primary)', animationDelay: '0.2s' }}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <form onSubmit={handleSend} className="p-4" style={{ borderTop: '1px solid var(--border)' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--muted-foreground)' }}>
+            Say <span className="font-semibold" style={{ color: 'var(--foreground)' }}>&quot;Hey Trippee&quot;</span> to ask the AI assistant
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={input}
+              onChange={handleInputChange}
+              placeholder="Type a message..."
+              className="flex-1 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 transition-all"
               style={{
                 border: '1px solid var(--input)',
                 backgroundColor: 'var(--background)',
                 color: 'var(--foreground)',
+                // @ts-expect-error CSS variable
                 '--tw-ring-color': 'var(--ring)'
-              } as React.CSSProperties}
-            disabled={isLoading}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="px-4 py-2 rounded-lg transition-all disabled:cursor-not-allowed"
-            style={{
-              backgroundColor: isLoading || !input.trim() ? 'var(--muted)' : 'var(--primary)',
-              color: isLoading || !input.trim() ? 'var(--muted-foreground)' : 'var(--primary-foreground)'
-            }}
-          >
-            Send
-          </button>
-        </div>
-      </form>
-    </div>
+              }}
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="px-4 py-2 rounded-lg transition-all disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: isLoading || !input.trim() ? 'var(--muted)' : 'var(--primary)',
+                color: isLoading || !input.trim() ? 'var(--muted-foreground)' : 'var(--primary-foreground)'
+              }}
+            >
+              Send
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
   );
 }

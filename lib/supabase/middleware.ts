@@ -27,7 +27,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  // Refresh the session - Supabase SSR will handle token refresh automatically
+  // Errors are handled gracefully to not break the request flow
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    // Silently handle errors - Supabase will clear invalid tokens automatically
+  }
 
   return supabaseResponse;
 }

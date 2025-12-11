@@ -27,6 +27,14 @@ interface ItineraryPanelProps {
   tripDays?: number;
   onPlaceMoved?: (placeId: string, newDay: number | null, newOrder: number) => void;
   onPlaceEdit?: (place: Place) => void;
+  // Mobile drawer props
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
+  // Generate itinerary props (for mobile)
+  onGenerateItinerary?: () => void;
+  isGenerating?: boolean;
+  resetExistingItinerary?: boolean;
+  onResetChange?: (reset: boolean) => void;
 }
 
 // Helper function to extract text from Tiptap JSON content
@@ -204,6 +212,12 @@ export default function ItineraryPanel({
   tripDays = 3,
   onPlaceMoved,
   onPlaceEdit,
+  isMobileOpen = false,
+  onMobileClose,
+  onGenerateItinerary,
+  isGenerating = false,
+  resetExistingItinerary = false,
+  onResetChange,
 }: ItineraryPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isUnassignedCollapsed, setIsUnassignedCollapsed] = useState(false);
@@ -270,9 +284,11 @@ export default function ItineraryPanel({
     }
   }
 
+  // On desktop: show collapsed button when collapsed
+  // On mobile: the panel is controlled by parent via isMobileOpen prop
   if (isCollapsed) {
     return (
-      <div className="fixed right-4 top-4 z-10">
+      <div className="hidden sm:block fixed right-4 top-4 z-10">
         <button
           onClick={() => setIsCollapsed(false)}
           className="rounded-lg p-3 transition-colors"
@@ -301,13 +317,32 @@ export default function ItineraryPanel({
 
   return (
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="fixed right-0 top-0 h-screen w-80 overflow-y-auto z-10 flex flex-col" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-2xl)' }}>
+      {/* Mobile overlay backdrop */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 sm:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+      
+      {/* Panel - responsive: drawer on mobile, fixed sidebar on desktop */}
+      <div 
+        className={`
+          fixed top-0 h-screen overflow-y-auto flex flex-col z-50
+          w-full sm:w-80 right-0
+          transform transition-transform duration-300 ease-in-out
+          ${isMobileOpen ? 'translate-x-0' : 'translate-x-full'}
+          sm:translate-x-0 sm:z-10
+        `}
+        style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-2xl)' }}
+      >
         {/* Header */}
         <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>Itinerary</h2>
+          {/* Desktop collapse button */}
           <button
             onClick={() => setIsCollapsed(true)}
-            className="p-2 rounded-lg transition-colors"
+            className="hidden sm:block p-2 rounded-lg transition-colors"
             style={{ color: 'var(--foreground)' }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -326,7 +361,76 @@ export default function ItineraryPanel({
               />
             </svg>
           </button>
+          {/* Mobile close button */}
+          <button
+            onClick={onMobileClose}
+            className="sm:hidden p-2 rounded-lg transition-colors"
+            style={{ color: 'var(--foreground)' }}
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
+
+        {/* Mobile Generate Itinerary Button - shown above Unassigned section */}
+        {onGenerateItinerary && (unassignedPlaces.length > 0 || places.some(p => p.day_assigned !== null)) && (
+          <div className="sm:hidden p-4" style={{ borderBottom: '1px solid var(--border)' }}>
+            {/* Reset checkbox */}
+            {places.some(p => p.day_assigned !== null) && onResetChange && (
+              <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resetExistingItinerary}
+                  onChange={(e) => onResetChange(e.target.checked)}
+                  disabled={isGenerating}
+                  className="w-4 h-4 rounded"
+                  style={{ accentColor: 'var(--primary)' }}
+                />
+                <span className="text-sm" style={{ color: 'var(--foreground)' }}>
+                  Reset existing itinerary
+                </span>
+              </label>
+            )}
+            {/* Generate button */}
+            <button
+              onClick={onGenerateItinerary}
+              disabled={isGenerating || (unassignedPlaces.length === 0 && !resetExistingItinerary)}
+              className="w-full px-4 py-3 rounded-lg transition-all duration-200 font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: 'var(--primary)',
+                color: 'var(--primary-foreground)',
+              }}
+            >
+              {isGenerating ? (
+                <>
+                  <div className="w-5 h-5 rounded-full animate-spin" style={{ border: '2px solid var(--primary-foreground)', borderTopColor: 'transparent' }} />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {resetExistingItinerary 
+                    ? `Regenerate Itinerary (${places.length})`
+                    : `Generate Itinerary (${unassignedPlaces.length})`
+                  }
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Unassigned Section */}
         <div style={{ borderBottom: '1px solid var(--border)' }}>

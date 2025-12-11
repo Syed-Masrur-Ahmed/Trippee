@@ -133,7 +133,7 @@ IMPORTANT: After using the search_places tool, you MUST provide a text response 
    
    **CRITICAL - Response Format**: When you use the search_places tool:
    - The tool returns a success message with placesAdded count - you do NOT see place names
-   - Your response MUST be friendly and brief: "Great! I've added [X] place(s) to your itinerary. Check the itinerary panel on the right to see [it/them]!"
+   - Your response MUST be friendly and brief: "Great! I've added [X] place(s) to your itinerary!"
    - Replace [X] with the number from the tool's placesAdded field
    - Use "it" for 1 place, "them" for multiple places
    - NEVER mention place names - you don't have access to them
@@ -166,7 +166,7 @@ IMPORTANT: After using the search_places tool, you MUST provide a text response 
 - Trip ID: ${tripId}
 - Current places on map: ${places?.length || 0}
 
-Remember: You're helping real people plan real trips. Be practical, friendly, and considerate of different travel styles and preferences. When you add places using the search_places tool, do NOT mention specific place names - just tell the user to check the itinerary panel.`,
+Remember: You're helping real people plan real trips. Be practical, friendly, and considerate of different travel styles and preferences. When you add places using the search_places tool, do NOT mention specific place names - just confirm they've been added to the itinerary.`,
       messages,
       tools: {
         search_places: createSearchPlacesTool(tripId),
@@ -213,7 +213,7 @@ Remember: You're helping real people plan real trips. Be practical, friendly, an
       if (placesAdded > 0) {
         result = {
           ...result,
-          text: `Great! I've added ${placesAdded} place${placesAdded > 1 ? 's' : ''} to your itinerary. Check the itinerary panel on the right to see ${placesAdded > 1 ? 'them' : 'it'}!`,
+          text: `Great! I've added ${placesAdded} place${placesAdded > 1 ? 's' : ''} to your itinerary!`,
         } as typeof result;
       } else if (placeInfoError) {
         result = {

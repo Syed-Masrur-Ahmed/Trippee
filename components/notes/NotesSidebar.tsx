@@ -70,12 +70,12 @@ export default function NotesSidebar({ tripId, tripDays = 3, selectedNote, onSel
 
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--card)' }}>
-      {/* Header */}
-      <div className="p-4" style={{ borderBottom: '1px solid var(--border)' }}>
+      {/* Desktop Header */}
+      <div className="hidden sm:block p-4" style={{ borderBottom: '1px solid var(--border)' }}>
         <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>Notes</h2>
       </div>
 
-      {/* Places List */}
+      {/* Notes List */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-8">

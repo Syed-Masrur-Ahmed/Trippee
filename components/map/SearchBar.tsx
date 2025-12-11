@@ -84,7 +84,7 @@ export default function SearchBar({ onSelectResult }: SearchBarProps) {
   }
 
   return (
-    <div ref={searchRef} className="relative w-full max-w-md">
+    <div ref={searchRef} className="relative w-full sm:max-w-md">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: 'var(--muted-foreground)' }} />
         <input

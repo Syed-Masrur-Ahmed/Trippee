@@ -42,6 +42,7 @@ Trippee is a real-time collaborative travel planning application that combines i
 - **Per-place notes** to capture details about each destination
 - **Day notes** for each day in your itinerary with previews in the itinerary panel
 - **General trip notes** for overall planning
+- **Mobile-optimized UI** with side drawer navigation and full-screen editor
 - Built with Tiptap editor
 
 ### Team Collaboration
@@ -51,6 +52,13 @@ Trippee is a real-time collaborative travel planning application that combines i
 - **Role-based access** (owner, member)
 - **Real-time synchronization** of all changes
 - **Ownership transfer** when creators leave
+
+### Mobile-First Design
+- **Fully responsive** across all screen sizes
+- **Mobile-optimized layouts** for itinerary, notes, and chat
+- **Touch-friendly controls** with floating dock and drawer navigation
+- **Desktop layout preserved** - no changes to screens > 640px
+- **Adaptive UI** that works seamlessly on phones, tablets, and desktops
 
 ---
 

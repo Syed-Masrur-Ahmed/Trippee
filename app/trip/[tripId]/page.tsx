@@ -55,6 +55,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [resetExistingItinerary, setResetExistingItinerary] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const [isMobileItineraryOpen, setIsMobileItineraryOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -662,6 +663,29 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         onMapMove={handleMapMove}
         onSearchResult={handleSearchResult}
       />
+      {/* Mobile Itinerary Toggle Button */}
+      <button
+        onClick={() => setIsMobileItineraryOpen(true)}
+        className="sm:hidden fixed top-20 right-4 z-30 p-3 rounded-lg transition-colors"
+        style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-lg)' }}
+        aria-label="Open Itinerary"
+      >
+        <svg
+          className="w-6 h-6"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          style={{ color: 'var(--foreground)' }}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 6h16M4 12h16M4 18h16"
+          />
+        </svg>
+      </button>
+      
       <ItineraryPanel
         tripId={tripId}
         places={places}
@@ -673,6 +697,12 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         }
         onPlaceMoved={handlePlaceMoved}
         onPlaceEdit={handleMarkerClick}
+        isMobileOpen={isMobileItineraryOpen}
+        onMobileClose={() => setIsMobileItineraryOpen(false)}
+        onGenerateItinerary={handleGenerateItinerary}
+        isGenerating={isGenerating}
+        resetExistingItinerary={resetExistingItinerary}
+        onResetChange={setResetExistingItinerary}
       />
       
       <TripSettingsModal
@@ -685,7 +715,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       />
       
       {(unassignedCount > 0 || places.some(p => p.day_assigned !== null)) && (
-        <div className="fixed bottom-8 right-8 z-20 flex flex-col items-end gap-3" style={{ marginRight: '340px' }}>
+        <div className="hidden sm:flex fixed bottom-8 right-8 z-20 flex-col items-end gap-3 sm:mr-[340px]">
           {/* Checkbox for reset option */}
           {places.some(p => p.day_assigned !== null) && (
             <label className="flex items-center gap-2 rounded-lg px-4 py-2 cursor-pointer transition-colors" style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-lg)' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--card)'}>

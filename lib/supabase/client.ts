@@ -1,10 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 import { Database } from './schema.types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+// Use createBrowserClient for proper cookie handling in Next.js
+export const supabase = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
 
 // Client-side helpers
 export async function getTrip(tripId: string) {

@@ -16,12 +16,20 @@ interface FloatingDockProps {
 }
 
 export function FloatingDock({ items }: FloatingDockProps) {
-  // Center the dock in the map area (from left edge to left edge of itinerary panel)
+  // Mobile: Center at bottom of screen
+  // Desktop: Center in map area (from left edge to left edge of itinerary panel)
   // Map area is calc(100% - 320px), so center is at calc((100% - 320px) / 2)
   return (
-    <div className="fixed bottom-8 z-50" style={{ left: 'calc((100% - 320px) / 2)', transform: 'translateX(-50%)' }}>
-      <Dock items={items} />
-    </div>
+    <>
+      {/* Mobile dock - centered at bottom */}
+      <div className="sm:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+        <Dock items={items} />
+      </div>
+      {/* Desktop dock - centered in map area (accounting for sidebar) */}
+      <div className="hidden sm:block fixed bottom-8 z-50" style={{ left: 'calc((100% - 320px) / 2)', transform: 'translateX(-50%)' }}>
+        <Dock items={items} />
+      </div>
+    </>
   );
 }
 

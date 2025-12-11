@@ -94,27 +94,27 @@ export default function Home() {
                 Start Planning Your Trip Now
               </button>
             </div>
-          </div>
-          
-          {/* Made by text - part of flex on mobile, absolute on desktop */}
-          <div 
-            className="text-xs sm:hidden flex-shrink-0" 
-            style={{ 
-              color: 'var(--muted-foreground)'
-            }}
-          >
-            Made by{' '}
-            <Link
-              href="https://github.com/Syed-Masrur-Ahmed"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors underline"
-              style={{ color: 'var(--primary)' }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            
+            {/* Made by text - right below button on mobile */}
+            <div 
+              className="text-[10px] mt-4 sm:hidden text-center" 
+              style={{ 
+                color: 'var(--muted-foreground)'
+              }}
             >
-              Syed Masrur Ahmed
-            </Link>
+              Made by{' '}
+              <Link
+                href="https://github.com/Syed-Masrur-Ahmed"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition-colors underline"
+                style={{ color: 'var(--primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              >
+                Syed Masrur Ahmed
+              </Link>
+            </div>
           </div>
         </div>
         {/* Made by text - desktop only, absolutely positioned */}

@@ -4,6 +4,7 @@ import { Original_Surfer } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,6 +41,7 @@ export default function RootLayout({
           <ConditionalHeader />
           {children}
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );

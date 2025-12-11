@@ -51,14 +51,25 @@ export default function Home() {
   return (
     <>
       <div 
-        className="flex h-screen items-center justify-center relative overflow-hidden sm:min-h-screen sm:overflow-auto" 
-        style={{ backgroundColor: 'var(--background)' }}
+        className="flex items-center justify-center relative overflow-hidden sm:min-h-screen sm:overflow-auto" 
+        style={{ 
+          backgroundColor: 'var(--background)',
+          height: '100dvh',
+          minHeight: '100vh'
+        }}
       >
         <Squares direction="diagonal" speed={0.2} squareSize={50} />
-        <div className="max-w-md w-full px-6 relative z-10 flex flex-col items-center justify-between h-full py-8 sm:py-0 sm:h-auto sm:justify-center">
-          <div className="flex-1 flex flex-col items-center justify-center min-h-0">
-            <div className="text-center mb-4 sm:mb-12">
-              <h1 className="text-4xl sm:text-7xl font-bold mb-2 sm:mb-4 trippee-font" style={{ color: 'var(--foreground)' }}>Trippee</h1>
+        <div 
+          className="max-w-md w-full px-6 relative z-10 flex flex-col items-center justify-between h-full sm:justify-center sm:h-auto"
+          style={{
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 3.5rem)',
+            minHeight: '100dvh'
+          }}
+        >
+          <div className="flex flex-col items-center justify-center flex-1 w-full">
+            <div className="text-center mb-6 sm:mb-12">
+              <h1 className="text-6xl sm:text-7xl font-bold mb-2 sm:mb-4 trippee-font" style={{ color: 'var(--foreground)' }}>Trippee</h1>
               <p className="text-sm sm:text-lg" style={{ color: 'var(--muted-foreground)' }}>AI-powered collaborative trip planning</p>
             </div>
 
@@ -86,7 +97,12 @@ export default function Home() {
           </div>
           
           {/* Made by text - part of flex on mobile, absolute on desktop */}
-          <div className="text-xs mt-auto sm:hidden" style={{ color: 'var(--muted-foreground)' }}>
+          <div 
+            className="text-xs sm:hidden flex-shrink-0" 
+            style={{ 
+              color: 'var(--muted-foreground)'
+            }}
+          >
             Made by{' '}
             <Link
               href="https://github.com/Syed-Masrur-Ahmed"

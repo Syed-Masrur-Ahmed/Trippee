@@ -1,0 +1,53 @@
+{
+  "name": "trippee",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^2.0.44",
+    "@ai-sdk/react": "^2.0.104",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.86.0",
+    "@tabler/icons-react": "^3.35.0",
+    "@tiptap/extension-collaboration": "^2.27.1",
+    "@tiptap/extension-collaboration-cursor": "^2.26.2",
+    "@tiptap/react": "^2.27.1",
+    "@tiptap/starter-kit": "^2.27.1",
+    "@vercel/analytics": "^1.6.1",
+    "ai": "^5.0.104",
+    "gsap": "^3.14.1",
+    "jspdf": "^3.0.4",
+    "lucide-react": "^0.555.0",
+    "mapbox-gl": "^3.16.0",
+    "motion": "^12.23.25",
+    "next": "16.0.7",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-map-gl": "^8.1.0",
+    "resend": "^6.5.2",
+    "y-prosemirror": "^1.3.7",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.27",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/mapbox-gl": "^3.4.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

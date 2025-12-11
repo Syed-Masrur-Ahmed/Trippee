@@ -1,0 +1,299 @@
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
+import { createClient } from '@/lib/supabase/server'; // For Cookie Auth
+import { createClient as createClientJS } from '@supabase/supabase-js'; // For Header Auth
+import { NextRequest, NextResponse } from 'next/server';
+import { createSearchPlacesTool, createGetPlaceInfoTool } from '@/lib/ai/tools';
+
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface ToolInvocation {
+  toolName: string;
+  result?: { results?: unknown[]; placesAdded?: number; allResults?: unknown[] };
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ tripId: string }> }
+) {
+  try {
+    const { tripId } = await params;
+    
+    // --- 1. AUTHENTICATION FIX ---
+    // Check for Authorization Header (Bearer Token)
+    const authHeader = request.headers.get('Authorization');
+    
+    const supabase = authHeader
+      ? createClientJS(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          { global: { headers: { Authorization: authHeader } } }
+        )
+      : await createClient();
+
+    // Verify User
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData.user;
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // -----------------------------
+
+    // Verify Trip Membership
+    const { data: trip } = await supabase
+      .from('trips')
+      .select('id')
+      .eq('id', tripId)
+      .single();
+
+    if (!trip) {
+      return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+    }
+
+    const { messages: requestMessages } = await request.json();
+
+    // Extract the latest user message
+    const latestUserMessage = requestMessages
+      ?.filter((m: ChatMessage) => m.role === 'user' && m.content && m.content.trim())
+      .pop();
+
+    if (latestUserMessage && latestUserMessage.content?.trim()) {
+      // Save user message (Server-side)
+      const { error: msgError } = await supabase
+        .from('trip_messages')
+        .insert({
+          trip_id: tripId,
+          user_id: user.id,
+          content: latestUserMessage.content.trim(),
+          role: 'user',
+        } as any);
+
+      if (msgError) {
+        return NextResponse.json({ error: 'Failed to save message' }, { status: 500 });
+      }
+    }
+
+    // Check Trigger
+    const messageContent = latestUserMessage?.content?.trim() || '';
+    const aiTrigger = 'hey trippee';
+    const isAiRequest = messageContent.toLowerCase().startsWith(aiTrigger);
+
+    if (!isAiRequest) {
+      return new Response('', { status: 200 });
+    }
+
+    const aiMessage = messageContent.slice(aiTrigger.length).trim();
+
+    // Prepare Context
+    const { data: places } = await supabase
+      .from('places')
+      .select('id, name, lat, lng, category')
+      .eq('trip_id', tripId);
+
+    // Convert messages to AI SDK format, removing "Hey Trippee" prefix from latest message
+    const messages = (requestMessages || []).map((msg: ChatMessage, index: number) => {
+      // Replace the last user message with the cleaned version (without "Hey Trippee")
+      if (index === requestMessages.length - 1 && msg.role === 'user') {
+        return {
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: aiMessage || 'Hello', // If message was just "Hey Trippee", use "Hello"
+        };
+      }
+      return {
+        role: msg.role as 'user' | 'assistant' | 'system',
+        content: msg.content,
+      };
+    });
+
+    // First generation - may include tool calls
+    let result = await generateText({
+      model: google('gemini-2.5-flash'), 
+      system: `You are a collaborative travel planning assistant helping a group plan their trip. You're part of a group chat where all trip members can see your responses.
+
+IMPORTANT: After using the search_places tool, you MUST provide a text response explaining the results to the user. Never finish with just tool calls - always follow up with a helpful message.
+
+## Your Capabilities
+- **Place Recommendations**: Use the search_places tool to find locations and add them to the map
+- **General Trip Planning**: Provide advice on itinerary structure, timing, logistics, and travel tips
+- **Group Coordination**: Help coordinate activities that work for multiple people
+- **Local Insights**: Share knowledge about destinations, culture, transportation, and best practices
+
+## Your Behavior
+1. **When users ask for places**: Use the search_places tool to find and add places. The tool returns a success message with the number of places added - it does NOT return place names or details.
+   
+   **IMPORTANT - Quantity Detection**: Pay close attention to the number of places the user wants:
+   - If they say "find me a cafe" or "find me one cafe" → use limit=1
+   - If they say "find me cafes" (no number) → use limit=3 (reasonable default)
+   - If they say "find me 5 cafes" or "find me 10 restaurants" → extract the number and use that as the limit
+   - Always match the user's intent for quantity - if they specify a number, use it exactly
+   
+   **CRITICAL - Response Format**: When you use the search_places tool:
+   - The tool returns a success message with placesAdded count - you do NOT see place names
+   - Your response MUST be friendly and brief: "Great! I've added [X] place(s) to your itinerary. Check the itinerary panel on the right to see [it/them]!"
+   - Replace [X] with the number from the tool's placesAdded field
+   - Use "it" for 1 place, "them" for multiple places
+   - NEVER mention place names - you don't have access to them
+   - NEVER say "I found X places" or "Here are some options"
+   
+2. **When users ask about specific places**: Use the get_place_info tool (NOT search_places) to provide detailed information:
+   - If they ask "Tell me about [place name]", "Tell me more about [place name]", "What is [place name]?", "Give me info about [place name]"
+   - If they ask about a place that's already in their itinerary (e.g., "Tell me about the first place on Day 1")
+   - If they mention a specific place name (even if not in itinerary), use get_place_info to look it up
+   - **CRITICAL**: When calling get_place_info, you MUST extract the place name from the user's message and pass it as the placeName parameter. For example, if user says "tell me more about Tasty Treat Dhanmondi", you must call get_place_info with placeName="Tasty Treat Dhanmondi" (include the full name including location if mentioned).
+   - The tool will return detailed information including address, rating, reviews, opening hours, photos, etc.
+   - Share this information in a helpful, conversational way
+   - IMPORTANT: "Tell me about X" or "Tell me more about X" means use get_place_info, NOT search_places
+   
+3. **When users ask for planning advice**: Provide helpful guidance on:
+   - Itinerary structure and day-by-day planning
+   - Best times to visit attractions
+   - Transportation options and routes
+   - Budget tips and cost-saving strategies
+   - Local customs and cultural etiquette
+   - Weather considerations
+   - Packing suggestions
+   - Group coordination (scheduling, meeting points, etc.)
+
+3. **Be proactive**: If users seem stuck, offer suggestions or ask clarifying questions
+4. **Be conversational**: This is a group chat - address the whole group naturally
+5. **Be helpful and concise**: Provide actionable advice without being overwhelming
+
+## Context
+- Trip ID: ${tripId}
+- Current places on map: ${places?.length || 0}
+
+Remember: You're helping real people plan real trips. Be practical, friendly, and considerate of different travel styles and preferences. When you add places using the search_places tool, do NOT mention specific place names - just tell the user to check the itinerary panel.`,
+      messages,
+      tools: {
+        search_places: createSearchPlacesTool(tripId),
+        get_place_info: createGetPlaceInfoTool(tripId),
+      },
+    });
+
+    // If the result finished with tool calls but no text, generate a simple response
+    const lastStep = result.steps[result.steps.length - 1];
+    if (lastStep && (lastStep as any).finishReason === 'tool-calls' && !result.text) {
+      
+      // Check tool results for placesAdded (search_places) or errors (get_place_info)
+      let placesAdded = 0;
+      let placeInfoError = null;
+      let placeInfoResult = null;
+      
+      if (result.steps) {
+        for (const step of result.steps) {
+          if ((step as any).content) {
+            for (const item of (step as any).content) {
+              if (item.type === 'tool-result') {
+                const output = item.output?.value || item.output;
+                
+                // Check for search_places results
+                if (output?.placesAdded) {
+                  placesAdded = output.placesAdded;
+                } else if (output?.results && Array.isArray(output.results)) {
+                  placesAdded = output.results.length;
+                }
+                
+                // Check for get_place_info results or errors
+                if (output?.error) {
+                  placeInfoError = output.error;
+                } else if (output?.name || output?.address) {
+                  placeInfoResult = output;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Generate a simple text response
+      if (placesAdded > 0) {
+        result = {
+          ...result,
+          text: `Great! I've added ${placesAdded} place${placesAdded > 1 ? 's' : ''} to your itinerary. Check the itinerary panel on the right to see ${placesAdded > 1 ? 'them' : 'it'}!`,
+        } as typeof result;
+      } else if (placeInfoError) {
+        result = {
+          ...result,
+          text: placeInfoError,
+        } as typeof result;
+      } else if (placeInfoResult) {
+        // Format place info result
+        const { name, address, rating, category } = placeInfoResult;
+        let infoText = `Here's what I found about ${name || 'this place'}`;
+        if (address) infoText += `:\nAddress: ${address}`;
+        if (rating) infoText += `\nRating: ${rating}/5`;
+        if (category) infoText += `\nCategory: ${category}`;
+        result = {
+          ...result,
+          text: infoText,
+        } as typeof result;
+      } else {
+        result = {
+          ...result,
+          text: "I couldn't find any places matching your search. Try a different location or category!",
+        } as typeof result;
+      }
+    }
+
+    // Extract tool invocations from result steps
+    const toolInvocations: ToolInvocation[] = [];
+    
+    if (result.steps) {
+      for (const step of result.steps) {
+        if ((step as any).content && Array.isArray((step as any).content)) {
+          const content = (step as any).content;
+          const toolCalls = content.filter((item: any) => item.type === 'tool-call');
+          const toolResults = content.filter((item: any) => item.type === 'tool-result');
+          
+          for (const toolCall of toolCalls) {
+            const matchingResult = toolResults.find((tr: any) => tr.toolCallId === toolCall.toolCallId);
+            if (matchingResult) {
+              let toolResult = matchingResult.output?.value || matchingResult.output;
+              
+              // Normalize result structure
+              if (Array.isArray(toolResult)) {
+                toolResult = { results: toolResult };
+              } else if (toolResult && typeof toolResult === 'object') {
+                if (toolResult.allResults && !toolResult.results) {
+                  toolResult.results = toolResult.allResults;
+                }
+              } else {
+                toolResult = { results: [] };
+              }
+              
+              toolInvocations.push({
+                toolName: toolCall.toolName,
+                result: toolResult
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Save AI Response
+    if (result.text?.trim()) {
+      await supabase.from('trip_messages').insert({
+        trip_id: tripId,
+        user_id: null,
+        content: result.text.trim(),
+        role: 'assistant',
+      } as any);
+    }
+
+    return NextResponse.json({
+      content: result.text || '',
+      toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
+  }
+}

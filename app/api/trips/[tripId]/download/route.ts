@@ -1,0 +1,447 @@
+import { createClient } from '@/lib/supabase/server';
+import { createClient as createClientJS } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { jsPDF } from 'jspdf';
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ tripId: string }> }
+) {
+  const { tripId } = await params;
+  
+  // Dual authentication: try token-based first, fallback to cookie-based
+  let supabase;
+  const authHeader = request.headers.get('Authorization');
+  
+  if (authHeader) {
+    supabase = createClientJS(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: { headers: { Authorization: authHeader } },
+      }
+    );
+  } else {
+    supabase = await createClient();
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    // Fetch trip data
+    const { data: trip, error: tripError } = await supabase
+      .from('trips')
+      .select('id, name, start_date, end_date, trip_days')
+      .eq('id', tripId)
+      .single();
+
+    if (tripError || !trip) {
+      return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+    }
+
+    // Type assertion: trip is guaranteed to be non-null after the check above
+    const tripData = trip as { id: string; name: string; start_date: string | null; end_date: string | null; trip_days: number };
+
+    // Fetch places
+    const { data: places, error: placesError } = await supabase
+      .from('places')
+      .select('id, name, lat, lng, category, day_assigned, order_index, address, notes')
+      .eq('trip_id', tripId)
+      .order('day_assigned', { ascending: true, nullsFirst: false })
+      .order('order_index', { ascending: true, nullsFirst: false });
+
+    // Fetch notes (non-critical, continue even if this fails)
+    let generalNote: any = null;
+    const placeNotesMap = new Map<string, any>();
+    const dayNotesMap = new Map<number, any>();
+    
+    const { data: allNotes, error: notesError } = await supabase
+      .from('notes')
+      .select('place_id, day_number, content')
+      .eq('trip_id', tripId);
+
+    if (!notesError && allNotes) {
+      // Extract general notes (place_id is null and day_number is null)
+      generalNote = allNotes.find((n: any) => n.place_id === null && n.day_number === null);
+      
+      // Create a map of place notes
+      allNotes.forEach((note: any) => {
+        if (note.place_id) {
+          placeNotesMap.set(note.place_id, note.content);
+        }
+        if (note.day_number) {
+          dayNotesMap.set(note.day_number, note.content);
+        }
+      });
+    }
+
+    // Helper function to extract text from Tiptap JSON
+    function extractTextFromTiptap(content: any): string {
+      if (!content || typeof content !== 'object') return '';
+      
+      let text = '';
+      
+      function traverse(node: any) {
+        if (node.type === 'text' && node.text) {
+          text += node.text;
+        }
+        if (node.content && Array.isArray(node.content)) {
+          node.content.forEach(traverse);
+        }
+      }
+      
+      if (content.type === 'doc' && content.content) {
+        content.content.forEach(traverse);
+      }
+      
+      return text.trim();
+    }
+
+    if (placesError) {
+      return NextResponse.json({ error: 'Failed to load places' }, { status: 500 });
+    }
+
+    // Group places by day
+    const placesByDay: Record<number, typeof places> = {};
+    const unassignedPlaces = places?.filter((p) => !p.day_assigned) || [];
+
+    places?.forEach((place) => {
+      if (place.day_assigned) {
+        if (!placesByDay[place.day_assigned]) {
+          placesByDay[place.day_assigned] = [];
+        }
+        placesByDay[place.day_assigned].push(place);
+      }
+    });
+
+    // Sort places within each day by order_index
+    Object.keys(placesByDay).forEach((day) => {
+      placesByDay[Number(day)].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+    });
+
+    // Generate PDF using jsPDF
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'letter',
+    });
+
+    // Helper function to format date
+    function formatDate(dateString: string | null): string {
+      if (!dateString) return 'Not set';
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+    }
+
+    // Helper function to calculate date for a day
+    function getDateForDay(day: number): string {
+      if (!tripData.start_date) {
+        return '';
+      }
+      
+      try {
+        // Parse the date string (format: YYYY-MM-DD from PostgreSQL DATE type)
+        // Handle both date-only strings and datetime strings
+        let dateStr = tripData.start_date;
+        if (dateStr.includes('T')) {
+          // If it includes time, extract just the date part
+          dateStr = dateStr.split('T')[0];
+        }
+        
+        const [year, month, dayOfMonth] = dateStr.split('-').map(Number);
+        
+        // Create date object (using local timezone, but date-only so no timezone shift)
+        const startDate = new Date(year, month - 1, dayOfMonth);
+        
+        // Calculate the date for this day
+        const dayDate = new Date(startDate);
+        dayDate.setDate(startDate.getDate() + (day - 1));
+        
+        // Format the date
+        const weekday = dayDate.toLocaleDateString('en-US', { weekday: 'long' });
+        const formattedDate = dayDate.toLocaleDateString('en-US', { 
+          month: 'long', 
+          day: 'numeric',
+          year: 'numeric'
+        });
+        
+        return `${weekday}, ${formattedDate}`;
+      } catch {
+        return '';
+      }
+    }
+
+    let yPosition = 20; // Starting Y position
+    const pageHeight = doc.internal.pageSize.height;
+    const pageWidth = doc.internal.pageSize.width;
+    const margin = 20;
+    const lineHeight = 7;
+    const maxWidth = pageWidth - (margin * 2);
+
+    // Helper to check if we need a new page
+    function checkNewPage(spaceNeeded: number) {
+      if (yPosition + spaceNeeded > pageHeight - margin) {
+        doc.addPage();
+        yPosition = margin;
+        return true;
+      }
+      return false;
+    }
+
+    // Header
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    const titleWidth = doc.getTextWidth(tripData.name);
+    doc.text(tripData.name, (pageWidth - titleWidth) / 2, yPosition);
+    yPosition += 10;
+
+    // Trip dates
+    if (tripData.start_date || tripData.end_date) {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 100, 100);
+      let dateText = '';
+      if (tripData.start_date && tripData.end_date) {
+        dateText = `Trip Dates: ${formatDate(tripData.start_date)} - ${formatDate(tripData.end_date)}`;
+      } else if (tripData.start_date) {
+        dateText = `Start Date: ${formatDate(tripData.start_date)}`;
+      } else if (tripData.end_date) {
+        dateText = `End Date: ${formatDate(tripData.end_date)}`;
+      }
+      const dateWidth = doc.getTextWidth(dateText);
+      doc.text(dateText, (pageWidth - dateWidth) / 2, yPosition);
+      doc.setTextColor(0, 0, 0);
+      yPosition += 10;
+    }
+
+    // General Trip Notes
+    if (generalNote?.content) {
+      const generalNotesText = extractTextFromTiptap(generalNote.content);
+      if (generalNotesText) {
+        checkNewPage(20);
+        
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(74, 85, 104);
+        doc.text('General Trip Notes', margin, yPosition);
+        doc.setTextColor(0, 0, 0);
+        yPosition += 8;
+
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        const notesLines = doc.splitTextToSize(generalNotesText, maxWidth);
+        doc.text(notesLines, margin, yPosition);
+        yPosition += notesLines.length * 5 + 10;
+      }
+    }
+
+    // Itinerary by day
+    const tripDays = tripData.trip_days || Object.keys(placesByDay).length || 1;
+    
+    for (let day = 1; day <= tripDays; day++) {
+      const dayPlaces = placesByDay[day] || [];
+      
+      if (dayPlaces.length === 0 && day === 1 && Object.keys(placesByDay).length === 0) {
+        // Skip empty days if no places are assigned
+        continue;
+      }
+
+      checkNewPage(15);
+      
+      // Day header
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(74, 85, 104);
+      const dateInfo = getDateForDay(day);
+      const dayTitle = dateInfo ? `Day ${day} - ${dateInfo}` : `Day ${day}`;
+      doc.text(dayTitle, margin, yPosition);
+      doc.setTextColor(0, 0, 0);
+      yPosition += 8;
+
+      // Day notes
+      const dayNoteContent = dayNotesMap.get(day);
+      if (dayNoteContent) {
+        const dayNotesText = extractTextFromTiptap(dayNoteContent);
+        if (dayNotesText) {
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(85, 85, 85);
+          const dayNotesLines = doc.splitTextToSize(dayNotesText, maxWidth);
+          checkNewPage(dayNotesLines.length * 5 + 5);
+          doc.text(dayNotesLines, margin, yPosition);
+          yPosition += dayNotesLines.length * 5 + 3;
+          doc.setTextColor(0, 0, 0);
+        }
+      }
+
+      if (dayPlaces.length === 0) {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(150, 150, 150);
+        doc.text('No places assigned for this day.', margin + 5, yPosition);
+        doc.setTextColor(0, 0, 0);
+        yPosition += 10;
+        continue;
+      }
+
+      // Places for this day
+      dayPlaces.forEach((place, index) => {
+        checkNewPage(20);
+        
+        // Place number and name
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${index + 1}. ${place.name}`, margin, yPosition);
+        yPosition += 6;
+
+        // Category badge
+        if (place.category) {
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 100, 100);
+          doc.text(`[${place.category}]`, margin + 5, yPosition);
+          doc.setTextColor(0, 0, 0);
+          yPosition += 5;
+        }
+
+        // Location coordinates
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(`   Location: ${place.lat.toFixed(4)}, ${place.lng.toFixed(4)}`, margin + 5, yPosition);
+        yPosition += 5;
+
+        // Address if available
+        if (place.address) {
+          const addressLines = doc.splitTextToSize(`   Address: ${place.address}`, maxWidth - 10);
+          doc.text(addressLines, margin + 5, yPosition);
+          yPosition += addressLines.length * 5;
+        }
+
+        // Old notes field if available (legacy)
+        if (place.notes) {
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(85, 85, 85);
+          const notesLines = doc.splitTextToSize(`   Notes: ${place.notes}`, maxWidth - 10);
+          doc.text(notesLines, margin + 5, yPosition);
+          yPosition += notesLines.length * 5;
+          doc.setTextColor(0, 0, 0);
+        }
+
+        // Place-specific notes from notes table
+        const placeNoteContent = placeNotesMap.get(place.id);
+        if (placeNoteContent) {
+          const placeNotesText = extractTextFromTiptap(placeNoteContent);
+          if (placeNotesText) {
+            checkNewPage(15);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(85, 85, 85);
+            const placeNotesLines = doc.splitTextToSize(`   Notes: ${placeNotesText}`, maxWidth - 10);
+            doc.text(placeNotesLines, margin + 5, yPosition);
+            yPosition += placeNotesLines.length * 5;
+            doc.setTextColor(0, 0, 0);
+          }
+        }
+
+        yPosition += 3;
+      });
+    }
+
+    // Unassigned places (if any)
+    if (unassignedPlaces.length > 0) {
+      checkNewPage(15);
+      
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(74, 85, 104);
+      doc.text('Unassigned Places', margin, yPosition);
+      doc.setTextColor(0, 0, 0);
+      yPosition += 8;
+
+      unassignedPlaces.forEach((place, index) => {
+        checkNewPage(15);
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${index + 1}. ${place.name}`, margin, yPosition);
+        yPosition += 6;
+
+        if (place.category) {
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 100, 100);
+          doc.text(`[${place.category}]`, margin + 5, yPosition);
+          doc.setTextColor(0, 0, 0);
+          yPosition += 5;
+        }
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(`   Location: ${place.lat.toFixed(4)}, ${place.lng.toFixed(4)}`, margin + 5, yPosition);
+        yPosition += 5;
+
+        if (place.address) {
+          const addressLines = doc.splitTextToSize(`   Address: ${place.address}`, maxWidth - 10);
+          doc.text(addressLines, margin + 5, yPosition);
+          yPosition += addressLines.length * 5;
+        }
+
+        // Place-specific notes from notes table
+        const unassignedPlaceNoteContent = placeNotesMap.get(place.id);
+        if (unassignedPlaceNoteContent) {
+          const unassignedPlaceNotesText = extractTextFromTiptap(unassignedPlaceNoteContent);
+          if (unassignedPlaceNotesText) {
+            checkNewPage(15);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(85, 85, 85);
+            const unassignedPlaceNotesLines = doc.splitTextToSize(`   Notes: ${unassignedPlaceNotesText}`, maxWidth - 10);
+            doc.text(unassignedPlaceNotesLines, margin + 5, yPosition);
+            yPosition += unassignedPlaceNotesLines.length * 5;
+            doc.setTextColor(0, 0, 0);
+          }
+        }
+
+        yPosition += 3;
+      });
+    }
+
+    // Add footer to all pages
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(150, 150, 150);
+      const footerText = `Generated by Trippee - ${new Date().toLocaleDateString()}`;
+      const footerWidth = doc.getTextWidth(footerText);
+      doc.text(footerText, (pageWidth - footerWidth) / 2, pageHeight - 10);
+    }
+
+    // Generate PDF buffer
+    const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+
+    // Return PDF as response
+    return new NextResponse(pdfBuffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${tripData.name.replace(/[^a-z0-9]/gi, '_')}_itinerary.pdf"`,
+        'Content-Length': pdfBuffer.length.toString(),
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error.message || 'Failed to generate PDF' },
+      { status: 500 }
+    );
+  }
+}

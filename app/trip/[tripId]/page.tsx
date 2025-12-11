@@ -599,38 +599,38 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const dockItems = [
     {
       title: 'Download Itinerary',
-      icon: <IconDownload className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      icon: <IconDownload className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: 'var(--foreground)' }} />,
       onClick: handleDownloadItinerary,
     },
     {
       title: 'Notes',
-      icon: <IconNotes className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      icon: <IconNotes className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: 'var(--foreground)' }} />,
       onClick: () => router.push(`/trip/${tripId}/notes`),
     },
     {
       title: 'Trip Members',
-      icon: <IconUsers className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      icon: <IconUsers className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: 'var(--foreground)' }} />,
       onClick: () => setShowMembersModal(true),
     },
     ...(isOwner
       ? [
           {
             title: 'Settings',
-            icon: <IconSettings className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+            icon: <IconSettings className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: 'var(--foreground)' }} />,
             onClick: () => setIsSettingsOpen(true),
           },
         ]
       : []),
     {
       title: isChatOpen ? 'Close Chat' : 'Open Chat',
-      icon: <IconMessageCircle className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+      icon: <IconMessageCircle className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: 'var(--foreground)' }} />,
       onClick: () => setIsChatOpen(!isChatOpen),
     },
     ...(isOwner
       ? [
           {
             title: 'Share Trip',
-            icon: <IconShare className="h-5 w-5" style={{ color: 'var(--foreground)' }} />,
+            icon: <IconShare className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: 'var(--foreground)' }} />,
             onClick: () => setShowShareModal(true),
           },
         ]

@@ -36,7 +36,7 @@ export function FloatingDock({ items }: FloatingDockProps) {
 function Dock({ items }: { items: DockItem[] }) {
   return (
     <div
-      className="flex items-end gap-2 px-4 py-3 rounded-2xl backdrop-blur-lg border transition-all duration-300"
+      className="flex items-end gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl backdrop-blur-lg border transition-all duration-300"
       style={{
         backgroundColor: 'var(--card)',
         borderColor: 'var(--border)',
@@ -107,7 +107,7 @@ function DockItem({
         backgroundColor: isHovered ? 'var(--accent)' : 'transparent',
         color: 'var(--foreground)',
       }}
-      className="relative flex items-center justify-center w-12 h-12 rounded-full transition-colors"
+      className="relative flex items-center justify-center w-8 h-8 sm:w-12 sm:h-12 rounded-full transition-colors"
     >
       <div className="flex items-center justify-center w-full h-full">
         {item.icon}

@@ -334,7 +334,11 @@ export default function ItineraryPanel({
           ${isMobileOpen ? 'translate-x-0' : 'translate-x-full'}
           sm:translate-x-0 sm:z-10
         `}
-        style={{ backgroundColor: 'var(--card)', boxShadow: 'var(--shadow-2xl)' }}
+        style={{ 
+          backgroundColor: 'var(--card)', 
+          boxShadow: 'var(--shadow-2xl)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+        }}
       >
         {/* Header */}
         <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -483,7 +487,7 @@ export default function ItineraryPanel({
         </div>
 
         {/* Day Sections */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-20 sm:pb-0">
           {Array.from({ length: tripDays }, (_, i) => i + 1).map((day) => (
             <div key={day} className="p-4" style={{ borderBottom: '1px solid var(--border)' }}>
               <div className="flex items-baseline gap-2 mb-2">
